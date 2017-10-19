@@ -274,7 +274,8 @@ class Likelihood(Parameterized):
                 if Y_metadata is not None:
                     for key in Y_metadata.keys():
                         Y_metadata_i[key] = Y_metadata[key][index,:]
-                    Y_metadata_list.append(Y_metadata_i)
+
+                Y_metadata_list.append(Y_metadata_i)
 
             if quad_mode == 'gk':
                 f = partial(self.integrate_gk)
@@ -283,7 +284,7 @@ class Likelihood(Parameterized):
                 quads.reshape(self.size, shape[0], shape[1])
             elif quad_mode == 'gh':
                 f = partial(self.integrate_gh)
-                quads = zip(*map(f, Y.flatten(), mu.flatten(), np.sqrt(sigma2.flatten())))
+                quads = zip(*map(f, Y.flatten(), mu.flatten(), np.sqrt(sigma2.flatten()), Y_metadata_list))
                 quads = np.hstack(quads)
                 quads = quads.T
             else:

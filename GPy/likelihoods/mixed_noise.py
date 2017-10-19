@@ -93,33 +93,49 @@ class MixedNoise(Likelihood):
         return self.likelihoods_list[output_index].moments_match_ep(Y_i, tau_i, v_i)
 
     def logpdf_link(self, inv_link_f, y, Y_metadata=None):
-        if 'output_index' in Y_metadata:
-            output_index = Y_metadata['output_index']
-        else:
-            raise ValueError("Index is not specified")
+        output_index = Y_metadata['output_index']
 
-        if y.size == 1:
+        if np.isscalar(y):
             return self.likelihoods_list[output_index[0]].logpdf_link(inv_link_f, y, Y_metadata)
 
         ret = np.zeros_like(y)
+        Y_metadata_list = []
+        for i in range(len(self.likelihoods_list)):
+            Y_metadata_i = {}
+            for k, v in Y_metadata:
+                Y_metadata_i[k] = v[output_index==i]
+
+            Y_metadata_list.append(Y_metadata_i)
+
         for i, lik in enumerate(self.likelihoods_list):
             index = output_index==i
-            ret[index] = lik.logpdf_link(inv_link_f[index], y[index], Y_metadata)
+            ret[index] = lik.logpdf_link(inv_link_f[index], y[index], Y_metadata_list[i])
 
         return ret
 
     def dlogpdf_dtheta(self, f, y, Y_metadata=None):
-        if 'output_index' in Y_metadata:
-            output_index = Y_metadata['output_index']
-        else:
-            raise ValueError("Index is not specified")
+        if self.size == 0:
+            return np.zeros((0, f,shape[0], f.shape[1]))
 
-        if y.size == 1:
-            return self.likelihoods_list[output_index[0]].dlogpdf_dtheta(f, y, Y_metadata)
+        output_index = Y_metadata['output_index']
 
-        ret = np.zeros_like(y)
+        if np.isscalar(y):
+            return self.likelihoods_list[output_index[0]].logpdf_link(inv_link_f, y, Y_metadata)
+
+        Y_metadata_list = []
+        for i in range(len(self.likelihoods_list)):
+            Y_metadata_i = {}
+            for k, v in Y_metadata:
+                Y_metadata_i[k] = v[output_index==i]
+
+            Y_metadata_list.append(Y_metadata_i)
+
+        ret = np.zeros((self.size, f.shape[0], f.shape[1]))
+        param_index = 0
         for i, lik in enumerate(self.likelihoods_list):
             index = output_index==i
-            ret[index] = lik.dlogpdf_dtheta(f[index], y[index], Y_metadata)
+            res = lik.dlogpdf_dtheta(inv_link_f[index], y[index], Y_metadata_list[i])
+            ret[param_index:param_index+res.shape[0], index] = res
+            param_index += res.shape[0]
 
         return ret
