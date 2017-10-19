@@ -98,7 +98,7 @@ def dparam_checkgrad(func, dfunc, params, params_names, args, constraints=None, 
 
 
 from nose.tools import with_setup
-class TestNoiseModels(object):
+class TestNoiseModels(unittest.TestCase):
     """
     Generic model checker
     """
@@ -383,35 +383,34 @@ class TestNoiseModels(object):
 
             #Required by all
             #Normal derivatives
-            yield self.t_logpdf, model, Y, f, Y_metadata
-            yield self.t_dlogpdf_df, model, Y, f, Y_metadata
-            yield self.t_d2logpdf_df2, model, Y, f, Y_metadata
-            #Link derivatives
-            yield self.t_dlogpdf_dlink, model, Y, f, Y_metadata, link_f_constraints
-            yield self.t_d2logpdf_dlink2, model, Y, f, Y_metadata, link_f_constraints
+            self.t_logpdf(model, Y, f, Y_metadata)
+            self.t_dlogpdf_df(model, Y, f, Y_metadata)
+            self.t_d2logpdf_df2(model, Y, f, Y_metadata)
+            # #Link derivatives
+            self.t_dlogpdf_dlink(model, Y, f, Y_metadata, link_f_constraints)
+            self.t_d2logpdf_dlink2(model, Y, f, Y_metadata, link_f_constraints)
             if laplace:
                 #Laplace only derivatives
-                yield self.t_d3logpdf_df3, model, Y, f, Y_metadata
-                yield self.t_d3logpdf_dlink3, model, Y, f, Y_metadata, link_f_constraints
+                self.t_d3logpdf_df3(model, Y, f, Y_metadata)
+                self.t_d3logpdf_dlink3(model, Y, f, Y_metadata, link_f_constraints)
                 #Params
-                yield self.t_dlogpdf_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
-                yield self.t_dlogpdf_df_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
-                yield self.t_d2logpdf2_df2_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
+                self.t_dlogpdf_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
+                self.t_dlogpdf_df_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
+                self.t_d2logpdf2_df2_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
                 #Link params
-                yield self.t_dlogpdf_link_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
-                yield self.t_dlogpdf_dlink_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
-                yield self.t_d2logpdf2_dlink2_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
-
+                self.t_dlogpdf_link_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
+                self.t_dlogpdf_dlink_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
+                self.t_d2logpdf2_dlink2_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
                 #laplace likelihood gradcheck
-                yield self.t_laplace_fit_rbf_white, model, self.X, Y, f, Y_metadata, self.step, param_vals, param_names, param_constraints
+                self.t_laplace_fit_rbf_white(model, self.X, Y, f, Y_metadata, self.step, param_vals, param_names, param_constraints)
             if ep:
                 #ep likelihood gradcheck
-                yield self.t_ep_fit_rbf_white, model, self.X, Y, f, Y_metadata, self.step, param_vals, param_names, param_constraints
+                self.t_ep_fit_rbf_white(model, self.X, Y, f, Y_metadata, self.step, param_vals, param_names, param_constraints)
             if var_exp:
                 #Need to specify mu and var!
-                yield self.t_varexp, model, Y, Y_metadata
-                yield self.t_dexp_dmu, model, Y, Y_metadata
-                yield self.t_dexp_dvar, model, Y, Y_metadata
+                self.t_varexp(model, Y, Y_metadata)
+                self.t_dexp_dmu(model, Y, Y_metadata)
+                self.t_dexp_dvar(model, Y, Y_metadata)
 
 
         self.tearDown()
@@ -854,5 +853,4 @@ class LaplaceTests(unittest.TestCase):
         self.assertTrue(m2.checkgrad(verbose=True))
 
 if __name__ == "__main__":
-    print("Running unit tests")
     unittest.main()
