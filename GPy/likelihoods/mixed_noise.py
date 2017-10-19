@@ -12,13 +12,14 @@ from ..core.parameterization import Parameterized
 import itertools
 
 class MixedNoise(Likelihood):
-    def __init__(self, likelihoods_list, name='mixed_noise'):
+    def __init__(self, likelihoods_list, name='mixed_noise', noise_index=None):
         #NOTE at the moment this likelihood only works for using a list of gaussians
         super(Likelihood, self).__init__(name=name)
 
         self.link_parameters(*likelihoods_list)
         self.likelihoods_list = likelihoods_list
         self.log_concave = False
+        self.not_block_really = False
 
     def gaussian_variance(self, Y_metadata):
         assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])
@@ -41,6 +42,7 @@ class MixedNoise(Likelihood):
         return np.array([dL_dKdiag[ind==i].sum() for i in range(len(self.likelihoods_list))])
 
     def predictive_values(self, mu, var, full_cov=False, Y_metadata=None):
+        assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])
         ind = Y_metadata['output_index'].flatten()
         _variance = np.array([self.likelihoods_list[j].variance for j in ind ])
         if full_cov:
@@ -54,6 +56,7 @@ class MixedNoise(Likelihood):
         return _variance + sigma**2
 
     def predictive_quantiles(self, mu, var, quantiles, Y_metadata):
+        assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])
         ind = Y_metadata['output_index'].flatten()
         outputs = np.unique(ind)
         Q = np.zeros( (mu.size,len(quantiles)) )
@@ -80,3 +83,43 @@ class MixedNoise(Likelihood):
             _ysim = np.array([np.random.normal(lik.gp_link.transf(gpj), scale=np.sqrt(lik.variance), size=1) for gpj in gp_filtered.flatten()])
             Ysim[flt,:] = _ysim.reshape(n1,N2)
         return Ysim
+
+    def moments_match_ep(self, Y_i, tau_i, v_i, Y_metadata_i=None):
+        if 'output_index' in Y_metadata_i:
+            output_index = Y_metadata_i['output_index'][0]
+        else:
+            raise ValueError("Index is not specified")
+
+        return self.likelihoods_list[output_index].moments_match_ep(Y_i, tau_i, v_i)
+
+    def logpdf_link(self, inv_link_f, y, Y_metadata=None):
+        if 'output_index' in Y_metadata:
+            output_index = Y_metadata['output_index']
+        else:
+            raise ValueError("Index is not specified")
+
+        if y.size == 1:
+            return self.likelihoods_list[output_index[0]].logpdf_link(inv_link_f, y, Y_metadata)
+
+        ret = np.zeros_like(y)
+        for i, lik in enumerate(self.likelihoods_list):
+            index = output_index==i
+            ret[index] = lik.logpdf_link(inv_link_f[index], y[index], Y_metadata)
+
+        return ret
+
+    def dlogpdf_dtheta(self, f, y, Y_metadata=None):
+        if 'output_index' in Y_metadata:
+            output_index = Y_metadata['output_index']
+        else:
+            raise ValueError("Index is not specified")
+
+        if y.size == 1:
+            return self.likelihoods_list[output_index[0]].dlogpdf_dtheta(f, y, Y_metadata)
+
+        ret = np.zeros_like(y)
+        for i, lik in enumerate(self.likelihoods_list):
+            index = output_index==i
+            ret[index] = lik.dlogpdf_dtheta(f[index], y[index], Y_metadata)
+
+        return ret
