@@ -618,6 +618,29 @@ class KernelTestsNonContinuous(unittest.TestCase):
         kern = GPy.kern.Coregionalize(1, output_dim=3, active_dims=[-1])
         self.assertTrue(check_kernel_gradient_functions(kern, X=self.X, X2=self.X2, verbose=verbose, fixed_X_dims=-1))
 
+class DualTaskKernelTest(unittest.TestCase):
+    def setUp(self):
+        self.N = 10
+        self.X = np.zeros((self.N, 1), dtype=int)
+        self.X[np.random.randint(0, 2, size=self.N).astype(bool), :] = 1
+        self.N2 = 5
+        self.X2 = np.zeros((self.N2, 1), dtype=int)
+        self.X2[np.random.randint(0, 2, size=self.N2).astype(bool), :] = 1
+
+        self.D = 1
+        self.Xx = np.random.randn(self.N, self.D)
+        self.Xa = GPy.util.multioutput.build_XY([self.Xx[:self.N], np.zeros((0, self.D))])[0]
+        self.Xx2 = np.random.randn(self.N, self.D)
+        self.Xa2 = GPy.util.multioutput.build_XY([self.Xx2[:self.N], np.zeros((0, self.D))])[0]
+
+    def test_DualTask_single(self):
+        kern = GPy.kern.DualTask(1)
+        self.assertTrue(check_kernel_gradient_functions(kern, X=self.X, X2=self.X2, verbose=verbose, fixed_X_dims=-1))
+
+    def test_DualTask_prod(self):
+        kern = GPy.kern.RBF(self.D).prod(GPy.kern.DualTask(1, active_dims=[self.D]))
+        self.assertTrue(check_kernel_gradient_functions(kern, X=self.Xa, X2=self.Xa2, verbose=verbose, fixed_X_dims=self.D))
+
 @unittest.skipIf(not config.getboolean('cython', 'working'),"Cython modules have not been built on this machine")
 class Coregionalize_cython_test(unittest.TestCase):
     """
@@ -787,7 +810,6 @@ class Kernel_Psi_statistics_GradientTests(unittest.TestCase):
         self.assertTrue(m.checkgrad())
 
 if __name__ == "__main__":
-    print("Running unit tests, please be (very) patient...")
     unittest.main()
 
 #     np.random.seed(0)
