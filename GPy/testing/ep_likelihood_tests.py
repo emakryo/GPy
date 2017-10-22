@@ -142,6 +142,50 @@ class TestObservationModels(unittest.TestCase):
             self.assertAlmostEqual(rmse_lap, rmse_alt, delta=1.5)
         # m3.optimize(optimizer=optimizer, max_iters=500)
 
+    @with_setup(setUp, tearDown)
+    def test_EP_with_Gaussian(self):
+        gaussian = GPy.likelihoods.Gaussian()
+        laplace_inf = GPy.inference.latent_function_inference.Laplace()
+
+        ep_inf_alt = GPy.inference.latent_function_inference.EP(ep_mode='alternated')
+        ep_inf_nested = GPy.inference.latent_function_inference.EP(ep_mode='nested')
+        ep_inf_frac = GPy.inference.latent_function_inference.EP(ep_mode='nested', eta=0.7)
+
+        m1 = GPy.core.GP(self.X.copy(), self.Y_noisy.copy(), kernel=self.kernel1.copy(), likelihood=gaussian.copy(), inference_method=laplace_inf)
+        # optimize
+        m1['.*white'].constrain_fixed(1e-5)
+        m1.randomize()
+
+        m2 = GPy.core.GP(self.X.copy(), self.Y_noisy.copy(), kernel=self.kernel1.copy(), likelihood=gaussian.copy(), inference_method=ep_inf_alt)
+        m2['.*white'].constrain_fixed(1e-5)
+        # m2.constrain_bounded('.*t_scale2', 0.001, 10)
+        m2.randomize()
+
+        m3 = GPy.core.GP(self.X, self.Y_noisy.copy(), kernel=self.kernel1, likelihood=gaussian.copy(), inference_method=ep_inf_nested)
+        m3['.*white'].constrain_fixed(1e-5)
+        # m3.constrain_bounded('.*t_scale2', 0.001, 10)
+        m3.randomize()
+
+        optimizer='bfgs'
+        m1.optimize(optimizer=optimizer,max_iters=400)
+        m2.optimize(optimizer=optimizer, max_iters=400)
+        m3.optimize(optimizer=optimizer, max_iters=500)
+
+        self.assertAlmostEqual(m1.log_likelihood(), m2.log_likelihood(),delta=200)
+
+        self.assertAlmostEqual(m1.log_likelihood(), m3.log_likelihood(), 3)
+
+        preds_mean_lap, preds_var_lap = m1.predict(self.X)
+        preds_mean_alt, preds_var_alt = m2.predict(self.X)
+        preds_mean_nested, preds_var_nested = m3.predict(self.X)
+        rmse_lap = self.rmse(preds_mean_lap, self.Y)
+        rmse_alt = self.rmse(preds_mean_alt, self.Y)
+        rmse_nested = self.rmse(preds_mean_nested, self.Y_noisy)
+
+        if rmse_alt > rmse_lap:
+            self.assertAlmostEqual(rmse_lap, rmse_alt, delta=1.5)
+            self.assertAlmostEqual(rmse_lap, rmse_nested, delta=1.5)
+
 
 if __name__ == "__main__":
     unittest.main()

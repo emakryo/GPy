@@ -11,6 +11,7 @@ from paramz.transformations import Logexp
 from ..core.parameterization import Parameterized
 import itertools
 
+
 class MixedNoise(Likelihood):
     def __init__(self, likelihoods_list, name='mixed_noise', noise_index=None):
         #NOTE at the moment this likelihood only works for using a list of gaussians
@@ -92,50 +93,116 @@ class MixedNoise(Likelihood):
 
         return self.likelihoods_list[output_index].moments_match_ep(Y_i, tau_i, v_i)
 
-    def logpdf_link(self, inv_link_f, y, Y_metadata=None):
-        output_index = Y_metadata['output_index']
+    def _each_likelihood(self, func_name, args, Y_metadata):
+        output_index = Y_metadata['output_index'].flatten()
+        if 'debug' in Y_metadata:
+            print(func_name, args[0].shape, args[1].shape)
 
-        if np.isscalar(y):
-            return self.likelihoods_list[output_index[0]].logpdf_link(inv_link_f, y, Y_metadata)
+        if np.isscalar(args[0]) or np.isscalar(args[1]):
+            return self.likelihoods_list[output_index[0]].__getattribute__(func_name)(*args, Y_metadata=Y_metadata)
 
-        ret = np.zeros_like(y)
-        Y_metadata_list = []
-        for i in range(len(self.likelihoods_list)):
-            Y_metadata_i = {}
-            for k, v in Y_metadata:
-                Y_metadata_i[k] = v[output_index==i]
-
-            Y_metadata_list.append(Y_metadata_i)
-
+        ret = np.zeros_like(args[0])
         for i, lik in enumerate(self.likelihoods_list):
-            index = output_index==i
-            ret[index] = lik.logpdf_link(inv_link_f[index], y[index], Y_metadata_list[i])
+            index = output_index == i
+            args_i = [arg[index] for arg in args]
+            Y_metadata_i = {}
+            for k, v in Y_metadata.items():
+                Y_metadata_i[k] = v[index]
+
+            ret[index] = lik.__getattribute__(func_name)(*args_i, Y_metadata=Y_metadata_i)
 
         return ret
 
-    def dlogpdf_dtheta(self, f, y, Y_metadata=None):
+    def _each_likelihood_dtheta(self, func_name, args, Y_metadata):
+        if 'debug' in Y_metadata:
+            print(func_name, args[0].shape, args[1].shape)
         if self.size == 0:
-            return np.zeros((0, f,shape[0], f.shape[1]))
+            return np.zeros((0, args[0].shape[0], args[0].shape[1]))
+        output_index = Y_metadata['output_index'].flatten()
 
-        output_index = Y_metadata['output_index']
+        if np.isscalar(args[0]) or np.isscalar(args[1]):
+            return self.likelihoods_list[output_index[0]].__getattribute__(func_name)(*args, Y_metadata=Y_metadata)
 
-        if np.isscalar(y):
-            return self.likelihoods_list[output_index[0]].logpdf_link(inv_link_f, y, Y_metadata)
+        ret = np.zeros((self.size, args[0].shape[0], args[0].shape[1]))
+        if self.size == 0:
+            return ret
 
-        Y_metadata_list = []
-        for i in range(len(self.likelihoods_list)):
-            Y_metadata_i = {}
-            for k, v in Y_metadata:
-                Y_metadata_i[k] = v[output_index==i]
-
-            Y_metadata_list.append(Y_metadata_i)
-
-        ret = np.zeros((self.size, f.shape[0], f.shape[1]))
         param_index = 0
         for i, lik in enumerate(self.likelihoods_list):
-            index = output_index==i
-            res = lik.dlogpdf_dtheta(inv_link_f[index], y[index], Y_metadata_list[i])
-            ret[param_index:param_index+res.shape[0], index] = res
+            index = output_index == i
+            args_i = [arg[index] for arg in args]
+            Y_metadata_i = {}
+            for k, v in Y_metadata.items():
+                Y_metadata_i[k] = v[index]
+
+            res = lik.__getattribute__(func_name)(*args_i, Y_metadata=Y_metadata_i)
+            ret[param_index:param_index + res.shape[0], index] = res
             param_index += res.shape[0]
+
+        return ret
+
+    def pdf(self, f, y, Y_metadata=None):
+        return self._each_likelihood('pdf', [f, y], Y_metadata=Y_metadata)
+
+    def logpdf(self, f, y, Y_metadata=None):
+        return self._each_likelihood('logpdf', [f, y], Y_metadata=Y_metadata)
+
+    def dlogpdf_df(self, f, y, Y_metadata=None):
+        return self._each_likelihood('dlogpdf_df', [f, y], Y_metadata=Y_metadata)
+
+    def d2logpdf_df2(self, f, y, Y_metadata=None):
+        return self._each_likelihood('d2logpdf_df2', [f, y], Y_metadata=Y_metadata)
+
+    def d3logpdf_df3(self, f, y, Y_metadata=None):
+        return self._each_likelihood('d3logpdf_df3', [f, y], Y_metadata=Y_metadata)
+
+    def dlogpdf_dtheta(self, f, y, Y_metadata=None):
+        return self._each_likelihood_dtheta('dlogpdf_dtheta', [f, y], Y_metadata=Y_metadata)
+
+    def dlogpdf_df_dtheta(self, f, y, Y_metadata=None):
+        return self._each_likelihood_dtheta('dlogpdf_df_dtheta', [f, y], Y_metadata=Y_metadata)
+
+    def d2logpdf_df2_dtheta(self, f, y, Y_metadata=None):
+        return self._each_likelihood_dtheta('d2logpdf_df2_dtheta', [f, y], Y_metadata=Y_metadata)
+
+    def logpdf_link(self, inv_link_f, y, Y_metadata=None):
+        return self._each_likelihood('logpdf_link', [inv_link_f, y], Y_metadata=Y_metadata)
+
+    def dlogpdf_dlink(self, inv_link_f, y, Y_metadata=None):
+        return self._each_likelihood('dlogpdf_dlink', [inv_link_f, y], Y_metadata=Y_metadata)
+
+    def d2logpdf_dlink2(self, inv_link_f, y, Y_metadata=None):
+        return self._each_likelihood('d2logpdf_dlink2', [inv_link_f, y], Y_metadata=Y_metadata)
+
+    def d3logpdf_dlink3(self, inv_link_f, y, Y_metadata=None):
+        return self._each_likelihood('d3logpdf_dlink3', [inv_link_f, y], Y_metadata=Y_metadata)
+
+    def dlogpdf_link_dtheta(self, inv_link_f, y, Y_metadata=None):
+        return self._each_likelihood_dtheta('dlogpdf_link_dtheta', [inv_link_f, y], Y_metadata=Y_metadata)
+
+    def dlogpdf_dlink_dtheta(self, inv_link_f, y, Y_metadata=None):
+        return self._each_likelihood_dtheta('dlogpdf_dlink_dtheta', [inv_link_f, y], Y_metadata=Y_metadata)
+
+    def d2logpdf_dlink2_dtheta(self, inv_link_f, y, Y_metadata=None):
+        return self._each_likelihood_dtheta('d2logpdf_dlink2_dtheta', [inv_link_f, y], Y_metadata=Y_metadata)
+
+    def ep_gradients(self, Y, cav_tau, cav_v, dL_dKdiag, Y_metadata=None, quad_mode='gk', boost_grad=1.):
+        output_index = Y_metadata['output_index'].flatten()
+        ret = np.zeros(self.size)
+        if self.size == 0:
+            return ret
+
+        param_index = 0
+        for i, lik in enumerate(self.likelihoods_list):
+            index = output_index == i
+            Y_metadata_i = {k: v[index] for k, v in Y_metadata.items()}
+            ep_grad_i = lik.ep_gradients(Y[index], cav_tau[index], cav_v[index], dL_dKdiag[index],
+                                         Y_metadata_i, quad_mode, boost_grad)
+            if np.isscalar(ep_grad_i):
+                ret[param_index] = ep_grad_i
+                param_index += 1
+            else:
+                ret[param_index:param_index+len(ep_grad_i)] = ep_grad_i
+                param_index += len(ep_grad_i)
 
         return ret

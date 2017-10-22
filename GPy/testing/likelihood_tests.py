@@ -128,6 +128,7 @@ class TestNoiseModels(unittest.TestCase):
         censored[random_inds] = 1
         self.Y_metadata = dict()
         self.Y_metadata['censored'] = censored
+        self.Y_metadata['output_index'] = np.zeros((15, 1), int)
 
         #Make a bigger step as lower bound can be quite curved
         self.step = 1e-4
@@ -146,14 +147,15 @@ class TestNoiseModels(unittest.TestCase):
                 "link_f_constraints": [constraint_wrappers, listed_here]
                 }
         """
-        self.noise_models = {"Student_t_default": {
-            "model": GPy.likelihoods.StudentT(deg_free=self.deg_free, sigma2=self.var),
-            "grad_params": {
-                "names": [".*t_scale2"],
-                "vals": [self.var],
-                "constraints": [(".*t_scale2", self.constrain_positive), (".*deg_free", self.constrain_fixed)]
-            },
-            "laplace": True
+        self.noise_models = {
+            "Student_t_default": {
+                "model": GPy.likelihoods.StudentT(deg_free=self.deg_free, sigma2=self.var),
+                "grad_params": {
+                    "names": [".*t_scale2"],
+                    "vals": [self.var],
+                    "constraints": [(".*t_scale2", self.constrain_positive), (".*deg_free", self.constrain_fixed)]
+                },
+                "laplace": True,
             },
             #"Student_t_deg_free": {
                 #"model": GPy.likelihoods.StudentT(deg_free=self.deg_free, sigma2=self.var),
@@ -220,7 +222,7 @@ class TestNoiseModels(unittest.TestCase):
                     "constraints": [(".*variance", self.constrain_positive)]
                 },
                 "laplace": True,
-                "ep": False, # FIXME: Should be True when we have it working again
+                "ep": True, # FIXME: Should be True when we have it working again
                 "variational_expectations": True,
             },
             "Gaussian_log": {
@@ -292,8 +294,22 @@ class TestNoiseModels(unittest.TestCase):
                 "Y": self.positive_Y,
                 "Y_metadata": self.Y_metadata,
                 "laplace": True
-            }
-            #,
+            },
+            "mixed_noise_default": {
+                "model": GPy.likelihoods.MixedNoise([
+                    GPy.likelihoods.Gaussian(name="gaussian1"),
+                    GPy.likelihoods.Gaussian(name="gaussian2")
+                ]),
+                "grad_params": {
+                    "names": [".*gaussian1.variance"],
+                    "vals": [self.var],
+                    "constraints": [(".*gaussian1.variance", self.constrain_positive),
+                                    (".*gaussian2.variance", self.constrain_fixed)]
+                },
+                "Y_metadata": self.Y_metadata,
+                "laplace": True,
+                "ep": True
+            },
             #GAMMA needs some work!"Gamma_default": {
             #"model": GPy.likelihoods.Gamma(),
             #"link_f_constraints": [constrain_positive],
@@ -337,6 +353,9 @@ class TestNoiseModels(unittest.TestCase):
         self.setUp()
 
         for name, attributes in self.noise_models.items():
+            if name not in ['mixed_noise_default', 'Gaussian_default']:
+                continue
+
             model = attributes["model"]
             if "grad_params" in attributes:
                 params = attributes["grad_params"]
@@ -617,15 +636,18 @@ class TestNoiseModels(unittest.TestCase):
         # Y = Y/Y.max()
         white_var = 1e-4
         kernel = GPy.kern.RBF(X.shape[1]) + GPy.kern.White(X.shape[1])
-        ep_inf = GPy.inference.latent_function_inference.EP()
+        ep_inf = GPy.inference.latent_function_inference.EP(ep_mode="nested")
 
         m = GPy.core.GP(X.copy(), Y.copy(), kernel=kernel, likelihood=model, Y_metadata=Y_metadata, inference_method=ep_inf)
         m['.*white'].constrain_fixed(white_var)
 
+        #Set constraints
+        for constrain_param, constraint in constraints:
+            constraint(constrain_param, m)
+
         for param_num in range(len(param_names)):
             name = param_names[param_num]
             m[name] = param_vals[param_num]
-            constraints[param_num](name, m)
 
         m.randomize()
         print(m)
@@ -712,6 +734,7 @@ class TestNoiseModels(unittest.TestCase):
         print(grad)
         print(model)
         assert grad.checkgrad(verbose=1)
+
 
 class LaplaceTests(unittest.TestCase):
     """
@@ -851,6 +874,215 @@ class LaplaceTests(unittest.TestCase):
         #m2.checkgrad(verbose=1)
         self.assertTrue(m1.checkgrad(verbose=True))
         self.assertTrue(m2.checkgrad(verbose=True))
+
+class MixedNoiseTests(unittest.TestCase):
+    def setUp(self):
+        self.n = 10
+        self.d = 2
+        self.X = np.random.randn(self.n, self.d)
+        self.f = np.random.randn(self.n, 1)
+        self.y = np.array([[0.13493051],
+                           [0.06883702],
+                           [1.36681777],
+                           [-0.30048562],
+                           [0.22779537],
+                           [-1.65133262],
+                           [0.93899127],
+                           [-0.32112883],
+                           [1.48361213],
+                           [0.31080327]])
+        self.cav_tau = np.array([2.89494603, 2.68878243, 2.85394881, 1.47725742, 4.59499317, 4.42608155,
+                                 4.47271434, 3.92765771, 1.24998937, 1.00075977])
+        self.cav_v = np.array([-0.91238264, -0.62105483, 0.02018127, 0.67029327, 1.16485395, 1.40626505,
+                               -1.13709693, 1.87915, -0.17777289, 0.0233202])
+        self.dL_dKdiag = np.array([-0.35931331, -0.39392614, 0.2639104, -0.20814695, -0.49101945, 1.35445938,
+                                   0.19098692, -0.18670074, 0.20377205, -0.26512856])
+        self.quad_mode = 'gh'
+        self.Y_metadata = {'output_index': np.zeros((self.n, 1), dtype=int)}
+        self.mixed = GPy.likelihoods.MixedNoise(
+            likelihoods_list=[
+                GPy.likelihoods.Gaussian(name="gaussian0"),
+                GPy.likelihoods.Gaussian(name="gaussian1")
+            ]
+        )
+        self.gauss = GPy.likelihoods.Gaussian()
+        self.mixed.likelihoods_list[1].constrain_fixed()
+
+        self.variance = 0.8
+        self.gauss.variance = self.variance
+        self.mixed.likelihoods_list[0].variance = self.variance
+
+        self.f_i = np.random.randn(1, 32)
+        self.y_i = np.random.randn()
+        self.Y_metadata_i = {'output_index': np.zeros(1, dtype=int)}
+
+        self.rbf = GPy.kern.RBF(self.d)
+        self.ep_mixed = GPy.inference.latent_function_inference.EP(ep_mode='nested')
+        self.ep_gauss = GPy.inference.latent_function_inference.EP(ep_mode='nested')
+
+        self.mixed_model = GPy.core.GP(self.X, self.y, self.rbf.copy(), self.mixed.copy(),
+                                       inference_method=self.ep_mixed, Y_metadata=self.Y_metadata)
+        self.gauss_model = GPy.core.GP(self.X, self.y, self.rbf.copy(), self.gauss.copy(),
+                                       inference_method=self.ep_gauss, Y_metadata=self.Y_metadata)
+
+    def test_pdf(self):
+        p_mixed = self.mixed.pdf(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.pdf(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed, p_gauss)
+        p_mixed_i = self.mixed.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_logpdf(self):
+        p_mixed = self.mixed.logpdf(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.logpdf(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed, p_gauss)
+        p_mixed_i = self.mixed.logpdf(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.logpdf(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+
+    def test_dlogpdf_df(self):
+        p_mixed = self.mixed.dlogpdf_df(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.dlogpdf_df(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed, p_gauss)
+        p_mixed_i = self.mixed.dlogpdf_df(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.dlogpdf_df(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_d2logpdf_df2(self):
+        p_mixed = self.mixed.d2logpdf_df2(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.d2logpdf_df2(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed, p_gauss)
+        # p_mixed_i = self.mixed.d2logpdf_df2(self.f_i, self.y_i, self.Y_metadata_i)
+        # p_gauss_i = self.gauss.d2logpdf_df2(self.f_i, self.y_i, self.Y_metadata_i)
+        # assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_d3logpdf_df3(self):
+        p_mixed = self.mixed.d3logpdf_df3(self.f, self.y, self.Y_metadata)
+        f_gauss = self.gauss.d3logpdf_df3(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed, f_gauss)
+        # p_mixed_i = self.mixed.d3logpdf_df3(self.f_i, self.y_i, self.Y_metadata_i)
+        # p_gauss_i = self.gauss.d3logpdf_df3(self.f_i, self.y_i, self.Y_metadata_i)
+        # assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_dlogpdf_dtheta(self):
+        p_mixed = self.mixed.dlogpdf_dtheta(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.dlogpdf_dtheta(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed[0:1], p_gauss)
+        p_mixed_i = self.mixed.dlogpdf_dtheta(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.dlogpdf_dtheta(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_dlogpdf_df_dtheta(self):
+        p_mixed = self.mixed.dlogpdf_df_dtheta(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.dlogpdf_df_dtheta(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed[0:1], p_gauss)
+        p_mixed_i = self.mixed.dlogpdf_dtheta(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.dlogpdf_dtheta(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_d2logpdf_df2_dtheta(self):
+        p_mixed = self.mixed.d2logpdf_df2_dtheta(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.d2logpdf_df2_dtheta(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed[0:1], p_gauss)
+        # p_mixed_i = self.mixed.d2logpdf_df2_dtheta(self.f_i, self.y_i, self.Y_metadata_i)
+        # p_gauss_i = self.gauss.d2logpdf_df2_dtheta(self.f_i, self.y_i, self.Y_metadata_i)
+        # assert np.allclose(p_mixed_i[0:1], p_gauss_i)
+
+    def test_logpdf_link(self):
+        p_mixed = self.mixed.logpdf_link(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.logpdf_link(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed, p_gauss)
+        p_mixed_i = self.mixed.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_dlogpdf_dlink(self):
+        p_mixed = self.mixed.dlogpdf_dlink(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.dlogpdf_dlink(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed, p_gauss)
+        p_mixed_i = self.mixed.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_d2logpdf_dlink2(self):
+        p_mixed = self.mixed.d2logpdf_dlink2(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.d2logpdf_dlink2(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed, p_gauss)
+        p_mixed_i = self.mixed.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_d3logpdf_dlink3(self):
+        p_mixed = self.mixed.d3logpdf_dlink3(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.d3logpdf_dlink3(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed, p_gauss)
+        p_mixed_i = self.mixed.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_dlogpdf_link_dtheta(self):
+        p_mixed = self.mixed.dlogpdf_link_dtheta(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.dlogpdf_link_dtheta(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed[0:1], p_gauss)
+        p_mixed_i = self.mixed.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_dlogpdf_dlink_dtheta(self):
+        p_mixed = self.mixed.dlogpdf_dlink_dtheta(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.dlogpdf_dlink_dtheta(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed[0:1], p_gauss)
+        p_mixed_i = self.mixed.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_d2logpdf_dlink2_dtheta(self):
+        p_mixed = self.mixed.d2logpdf_dlink2_dtheta(self.f, self.y, self.Y_metadata)
+        p_gauss = self.gauss.d2logpdf_dlink2_dtheta(self.f, self.y, self.Y_metadata)
+        assert np.allclose(p_mixed[0:1], p_gauss)
+        p_mixed_i = self.mixed.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        p_gauss_i = self.gauss.pdf(self.f_i, self.y_i, self.Y_metadata_i)
+        assert np.allclose(p_mixed_i, p_gauss_i)
+
+    def test_ep_grad_K(self):
+        assert np.allclose(self.gauss_model.grad_dict['dL_dK'], self.mixed_model.grad_dict['dL_dK'])
+
+    def test_ep_grad_m(self):
+        assert np.allclose(self.gauss_model.grad_dict['dL_dm'], self.mixed_model.grad_dict['dL_dm'])
+
+    def test_ep_grad_thetaL(self):
+        g_gauss = self.gauss_model.grad_dict['dL_dthetaL']
+        g_mixed = self.mixed_model.grad_dict['dL_dthetaL']
+        assert np.allclose(g_gauss, g_mixed[0]), "{} != {}".format(g_gauss, g_mixed[0])
+
+    def test_ep_gradient(self):
+        p_mixed = self.mixed.ep_gradients(self.y, self.cav_tau, self.cav_v, self.dL_dKdiag, self.Y_metadata, self.quad_mode)
+        p_gauss = self.gauss.ep_gradients(self.y, self.cav_tau, self.cav_v, self.dL_dKdiag, self.Y_metadata, self.quad_mode)
+        assert np.allclose(p_mixed[0], p_gauss), "{} != {}".format(p_mixed[0], p_gauss)
+
+    def test_ep_inference_arguments(self):
+        assert np.allclose(self.gauss_model.X, self.mixed_model.X)
+        assert np.allclose(self.gauss_model.kern.param_array, self.mixed_model.kern.param_array)
+        assert np.allclose(self.gauss_model.Y_normalized, self.mixed_model.Y_normalized)
+
+    def test_ep(self):
+        self.Y_metadata['debug'] = np.ones((self.n, 1), dtype=bool)
+        mixed_post_m = self.mixed_model.posterior.mean
+        gauss_post_m = self.gauss_model.posterior.mean
+        assert np.allclose(mixed_post_m, gauss_post_m)
+
+        print(self.gauss_model)
+        print(self.mixed_model)
+        mixed_grad = self.mixed_model.objective_function_gradients()
+        gauss_grad = self.gauss_model.objective_function_gradients()
+        print(mixed_grad, gauss_grad)
+        assert np.allclose(mixed_grad[:3], gauss_grad)
+
+        assert self.gauss_model.checkgrad(verbose=1)
+        assert self.mixed_model.checkgrad(verbose=1)
+
 
 if __name__ == "__main__":
     unittest.main()

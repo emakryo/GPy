@@ -29,6 +29,7 @@ class TestDistilltionModels(unittest.TestCase):
     def testGPDistillation(self):
         m = GPy.models.GPDistillation(self.X, self.Y, self.S)
         m.optimize()
+        print(m)
         fm, fv = m.predict_noiseless(self.Xgrid)
 
 if __name__ == "__main__":
