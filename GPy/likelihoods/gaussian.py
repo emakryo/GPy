@@ -85,9 +85,14 @@ class Gaussian(Likelihood):
         :param tau_i: precision of the cavity distribution (float)
         :param v_i: mean/variance of the cavity distribution (float)
         """
-        sigma2_hat = 1./(1./self.variance + tau_i)
-        mu_hat = sigma2_hat*(data_i/self.variance + v_i)
-        sum_var = self.variance + 1./tau_i
+
+        # FIXME: set lower bound of variance in case of numerical error of EP
+        variance = max(1e-6, self.variance)
+        # variance = self.variance
+
+        sigma2_hat = 1./(1./variance + tau_i)
+        mu_hat = sigma2_hat*(data_i/variance + v_i)
+        sum_var = variance + 1./tau_i
         Z_hat = 1./np.sqrt(2.*np.pi*sum_var)*np.exp(-.5*(data_i - v_i/tau_i)**2./sum_var)
         return Z_hat, mu_hat, sigma2_hat
 

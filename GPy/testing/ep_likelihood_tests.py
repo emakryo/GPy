@@ -186,6 +186,41 @@ class TestObservationModels(unittest.TestCase):
             self.assertAlmostEqual(rmse_lap, rmse_alt, delta=1.5)
             self.assertAlmostEqual(rmse_lap, rmse_nested, delta=1.5)
 
+    def test_EP_with_gaussian_small_variance(self):
+        likelihood = GPy.likelihoods.Gaussian(variance=1e-9)
+        inf_exact = GPy.inference.latent_function_inference.ExactGaussianInference()
+        m_exact = GPy.core.GP(self.X, self.Y, kernel=self.kernel1.copy(),
+                              likelihood=likelihood.copy(), Y_metadata=self.Y_metadata,
+                              inference_method=inf_exact)
+
+        print(m_exact.log_likelihood())
+
+        inf_ep = GPy.inference.latent_function_inference.EP(ep_mode='nested')
+        m_ep = GPy.core.GP(self.X, self.Y, kernel=self.kernel1.copy(),
+                           likelihood=likelihood.copy(), Y_metadata=self.Y_metadata,
+                           inference_method=inf_ep)
+
+        print(m_ep.log_likelihood())
+
+    def test_EP_with_gaussian_different_variance(self):
+        print("var\texact\tep\tdiff\tratio")
+        for neg_logv in range(10):
+            likelihood = GPy.likelihoods.Gaussian(variance=10**(-neg_logv))
+            inf_exact = GPy.inference.latent_function_inference.ExactGaussianInference()
+            m_exact = GPy.core.GP(self.X, self.Y, kernel=self.kernel1.copy(),
+                                  likelihood=likelihood.copy(), Y_metadata=self.Y_metadata,
+                                  inference_method=inf_exact)
+
+            inf_ep = GPy.inference.latent_function_inference.EP(ep_mode='nested')
+            m_ep = GPy.core.GP(self.X, self.Y, kernel=self.kernel1.copy(),
+                               likelihood=likelihood.copy(), Y_metadata=self.Y_metadata,
+                               inference_method=inf_ep)
+
+            var = float(likelihood.variance)
+            ll_exact = m_exact.log_likelihood()
+            ll_ep = m_ep.log_likelihood()
+            print("{}\t{}\t{}\t{}\t{}".format(var, ll_exact, ll_ep, abs(ll_exact-ll_ep), ll_exact/ll_ep))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -31,12 +31,13 @@ class GPDistillation(GP):
 
         # Input and Output
         Xall, Yall, self.output_index = util.multioutput.build_XY([X, X], [Y, S])
+        dim = X.shape[1]
 
         # Kernel
         if kernel is None:
-            dim = X.shape[1]
             kernel = kern.RBF(dim)
-            kernel = kernel.prod(kern.DualTask(input_dim=dim, active_dims=[dim]), name=kernel_name)
+
+        kernel = kernel.prod(kern.DualTask(input_dim=1, active_dims=[dim]), name=kernel_name)
 
         # Likelihood
         if likelihoods_list is not None:
@@ -47,10 +48,11 @@ class GPDistillation(GP):
         likelihood = util.multioutput.build_likelihood([Y, S], self.output_index, likelihoods_list)
 
         # Inference
-        ep = EP(ep_mode='nested')
+        ep = EP(ep_mode='nested', eta=0.9, always_reset=True)
 
         # Miscellaneous
         Y_metadata = {'output_index': self.output_index}
 
         super(GPDistillation, self).__init__(Xall, Yall, kernel, likelihood, name=name,
                                              Y_metadata=Y_metadata, inference_method=ep)
+
