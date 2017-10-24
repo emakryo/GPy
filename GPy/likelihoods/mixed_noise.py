@@ -105,10 +105,7 @@ class MixedNoise(Likelihood):
         for i, lik in enumerate(self.likelihoods_list):
             index = output_index == i
             args_i = [arg[index] for arg in args]
-            Y_metadata_i = {}
-            for k, v in Y_metadata.items():
-                Y_metadata_i[k] = v[index]
-
+            Y_metadata_i = {k: v[index] for k, v in Y_metadata.items()}
             ret[index] = lik.__getattribute__(func_name)(*args_i, Y_metadata=Y_metadata_i)
 
         return ret
@@ -131,11 +128,12 @@ class MixedNoise(Likelihood):
         for i, lik in enumerate(self.likelihoods_list):
             index = output_index == i
             args_i = [arg[index] for arg in args]
-            Y_metadata_i = {}
-            for k, v in Y_metadata.items():
-                Y_metadata_i[k] = v[index]
+            Y_metadata_i = {k: v[index] for k, v in Y_metadata.items()}
+            try:
+                res = lik.__getattribute__(func_name)(*args_i, Y_metadata=Y_metadata_i)
+            except NotImplementedError:
+                res = np.zeros((0, np.count_nonzero(index), ret.shape[2]))
 
-            res = lik.__getattribute__(func_name)(*args_i, Y_metadata=Y_metadata_i)
             ret[param_index:param_index + res.shape[0], index] = res
             param_index += res.shape[0]
 

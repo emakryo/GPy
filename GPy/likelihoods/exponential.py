@@ -39,7 +39,7 @@ class Exponential(Likelihood):
         """
         assert np.atleast_1d(link_f).shape == np.atleast_1d(y).shape
         log_objective = link_f*np.exp(-y*link_f)
-        return np.exp(np.sum(np.log(log_objective)))
+        return log_objective
 
     def logpdf_link(self, link_f, y, Y_metadata=None):
         """

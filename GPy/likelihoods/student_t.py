@@ -66,7 +66,7 @@ class StudentT(Likelihood):
                      / (np.sqrt(self.v * np.pi * self.sigma2)))
                      * ((1 + (1./float(self.v))*((e**2)/float(self.sigma2)))**(-0.5*(self.v + 1)))
                     )
-        return np.prod(objective)
+        return objective
 
     def logpdf_link(self, inv_link_f, y, Y_metadata=None):
         """

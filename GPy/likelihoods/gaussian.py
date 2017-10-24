@@ -86,13 +86,15 @@ class Gaussian(Likelihood):
         :param v_i: mean/variance of the cavity distribution (float)
         """
 
-        # FIXME: set lower bound of variance in case of numerical error of EP
-        variance = max(1e-6, self.variance)
-        # variance = self.variance
+        if self.variance < 1e-4:
+            warnings.warn("variance is too small: %f" % self.variance)
 
-        sigma2_hat = 1./(1./variance + tau_i)
-        mu_hat = sigma2_hat*(data_i/variance + v_i)
-        sum_var = variance + 1./tau_i
+        sigma2_hat = 1./(1./self.variance + tau_i)
+        if abs(data_i/self.variance + v_i)/max(abs(data_i/self.variance), abs(v_i)) < 0.01:
+            warnings.warn("cancellation of digits")
+
+        mu_hat = sigma2_hat*(data_i/self.variance + v_i)
+        sum_var = self.variance + 1./tau_i
         Z_hat = 1./np.sqrt(2.*np.pi*sum_var)*np.exp(-.5*(data_i - v_i/tau_i)**2./sum_var)
         return Z_hat, mu_hat, sigma2_hat
 
@@ -131,7 +133,8 @@ class Gaussian(Likelihood):
         :rtype: float
         """
         #Assumes no covariance, exp, sum, log for numerical stability
-        return np.exp(np.sum(np.log(stats.norm.pdf(y, link_f, np.sqrt(self.variance)))))
+        # return np.exp(np.sum(np.log(stats.norm.pdf(y, link_f, np.sqrt(self.variance)))))
+        return stats.norm.pdf(y, link_f, np.sqrt(self.variance))
 
     def logpdf_link(self, link_f, y, Y_metadata=None):
         """

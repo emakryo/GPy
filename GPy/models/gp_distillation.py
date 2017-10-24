@@ -55,4 +55,3 @@ class GPDistillation(GP):
 
         super(GPDistillation, self).__init__(Xall, Yall, kernel, likelihood, name=name,
                                              Y_metadata=Y_metadata, inference_method=ep)
-

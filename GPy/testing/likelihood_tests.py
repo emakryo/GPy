@@ -128,7 +128,12 @@ class TestNoiseModels(unittest.TestCase):
         censored[random_inds] = 1
         self.Y_metadata = dict()
         self.Y_metadata['censored'] = censored
-        self.Y_metadata['output_index'] = np.zeros((15, 1), int)
+
+        self.N_binary = 10
+        self.mixed_Y = np.concatenate([np.random.randint(0, 2, self.N_binary).reshape(-1, 1),
+                                       np.random.randn(self.N-self.N_binary, 1)], axis=0)
+        self.Y_metadata['output_index'] = np.concatenate([np.zeros((self.N_binary, 1), int),
+                                                          np.ones((self.N-self.N_binary, 1),int)], axis=0)
 
         #Make a bigger step as lower bound can be quite curved
         self.step = 1e-4
@@ -310,6 +315,22 @@ class TestNoiseModels(unittest.TestCase):
                 "laplace": True,
                 "ep": True
             },
+            "mixed_noise_bernoulli": {
+                "model": GPy.likelihoods.MixedNoise([
+                    GPy.likelihoods.Bernoulli(),
+                    GPy.likelihoods.Gaussian(),
+                ]),
+                "grad_params": {
+                    "names": [".*variance"],
+                    "vals": [self.var],
+                    "constraints": [(".*variance", self.constrain_positive)]
+                },
+                "link_f_constraints": [partial(self.constrain_bounded, lower=0, upper=1)],
+                "Y": self.mixed_Y,
+                "Y_metadata": self.Y_metadata,
+                "laplace": True,
+                "ep": True
+            }
             #GAMMA needs some work!"Gamma_default": {
             #"model": GPy.likelihoods.Gamma(),
             #"link_f_constraints": [constrain_positive],
@@ -353,9 +374,7 @@ class TestNoiseModels(unittest.TestCase):
         self.setUp()
 
         for name, attributes in self.noise_models.items():
-            if name not in ['mixed_noise_default', 'Gaussian_default']:
-                continue
-
+            print(name)
             model = attributes["model"]
             if "grad_params" in attributes:
                 params = attributes["grad_params"]
@@ -442,10 +461,9 @@ class TestNoiseModels(unittest.TestCase):
         print("\n{}".format(inspect.stack()[0][3]))
         print(model)
         #print model._get_params()
-        np.testing.assert_almost_equal(
-                model.pdf(f.copy(), Y.copy(), Y_metadata=Y_metadata).prod(),
-                               np.exp(model.logpdf(f.copy(), Y.copy(), Y_metadata=Y_metadata).sum())
-                               )
+        pdf = model.pdf(f.copy(), Y.copy(), Y_metadata=Y_metadata)
+        logpdf = model.logpdf(f.copy(), Y.copy(), Y_metadata=Y_metadata)
+        assert np.allclose(np.log(pdf), logpdf)
 
     @with_setup(setUp, tearDown)
     def t_dlogpdf_df(self, model, Y, f, Y_metadata):
@@ -875,7 +893,7 @@ class LaplaceTests(unittest.TestCase):
         self.assertTrue(m1.checkgrad(verbose=True))
         self.assertTrue(m2.checkgrad(verbose=True))
 
-class MixedNoiseTests(unittest.TestCase):
+class MixedNoiseTestsWith2Gaussian(unittest.TestCase):
     def setUp(self):
         self.n = 10
         self.d = 2
