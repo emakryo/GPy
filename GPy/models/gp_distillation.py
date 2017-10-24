@@ -48,7 +48,7 @@ class GPDistillation(GP):
         likelihood = util.multioutput.build_likelihood([Y, S], self.output_index, likelihoods_list)
 
         # Inference
-        ep = EP(ep_mode='nested', eta=0.9, always_reset=True)
+        ep = EP(ep_mode='nested')
 
         # Miscellaneous
         Y_metadata = {'output_index': self.output_index}

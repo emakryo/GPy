@@ -627,19 +627,31 @@ class DualTaskKernelTest(unittest.TestCase):
         self.X2 = np.zeros((self.N2, 1), dtype=int)
         self.X2[np.random.randint(0, 2, size=self.N2).astype(bool), :] = 1
 
-        self.D = 1
+        self.D = 2
+        self.N1 = 2
         self.Xx = np.random.randn(self.N, self.D)
-        self.Xa = GPy.util.multioutput.build_XY([self.Xx[:self.N], np.zeros((0, self.D))])[0]
+        self.Xa = GPy.util.multioutput.build_XY([self.Xx[:self.N1], self.Xx[self.N1:]])[0]
         self.Xx2 = np.random.randn(self.N, self.D)
-        self.Xa2 = GPy.util.multioutput.build_XY([self.Xx2[:self.N], np.zeros((0, self.D))])[0]
+        self.Xa2 = GPy.util.multioutput.build_XY([self.Xx2[:self.N1], self.Xx2[self.N1:]])[0]
 
-    def test_DualTask_single(self):
+        self.y = np.random.randn(self.N, 1)
+        self.gauss = GPy.likelihoods.Gaussian()
+
+    def test_single(self):
         kern = GPy.kern.DualTask(1)
         self.assertTrue(check_kernel_gradient_functions(kern, X=self.X, X2=self.X2, verbose=verbose, fixed_X_dims=-1))
 
-    def test_DualTask_prod(self):
+    def test_prod(self):
         kern = GPy.kern.RBF(self.D).prod(GPy.kern.DualTask(1, active_dims=[self.D]))
         self.assertTrue(check_kernel_gradient_functions(kern, X=self.Xa, X2=self.Xa2, verbose=verbose, fixed_X_dims=self.D))
+
+    def test_prod_ep(self):
+        kern = GPy.kern.RBF(self.D).prod(GPy.kern.DualTask(1, active_dims=[self.D]))
+        m_ep = GPy.core.GP(self.Xa, self.y, kernel=kern, likelihood=self.gauss,
+                           inference_method=GPy.inference.latent_function_inference.EP(ep_mode='nested'))
+        m_ep.randomize()
+        assert m_ep.checkgrad(verbose=True)
+
 
 @unittest.skipIf(not config.getboolean('cython', 'working'),"Cython modules have not been built on this machine")
 class Coregionalize_cython_test(unittest.TestCase):
