@@ -43,18 +43,23 @@ class MixedNoise(Likelihood):
         return np.array([dL_dKdiag[ind==i].sum() for i in range(len(self.likelihoods_list))])
 
     def predictive_values(self, mu, var, full_cov=False, Y_metadata=None):
-        assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])
-        ind = Y_metadata['output_index'].flatten()
-        _variance = np.array([self.likelihoods_list[j].variance for j in ind ])
-        if full_cov:
-            var += np.eye(var.shape[0])*_variance
+        if all([isinstance(l, Gaussian) for l in self.likelihoods_list]):
+            ind = Y_metadata['output_index'].flatten()
+            _variance = np.array([self.likelihoods_list[j].variance for j in ind ])
+            if full_cov:
+                var += np.eye(var.shape[0])*_variance
+            else:
+                var += _variance
+            return mu, var
         else:
-            var += _variance
-        return mu, var
+            assert full_cov is False
+            return super(MixedNoise, self).predictive_values(mu, var, full_cov=False, Y_metadata=Y_metadata)
 
-    def predictive_variance(self, mu, sigma, Y_metadata):
-        _variance = self.gaussian_variance(Y_metadata)
-        return _variance + sigma**2
+    def predictive_mean(self, mu, variance, Y_metadata=None):
+        return self._each_likelihood('predictive_mean', [mu, variance], Y_metadata=Y_metadata)
+
+    def predictive_variance(self, mu, variance, predictive_mean=None, Y_metadata=None):
+        return self._each_likelihood('predictive_variance', [mu, variance, predictive_mean], Y_metadata=Y_metadata)
 
     def predictive_quantiles(self, mu, var, quantiles, Y_metadata):
         assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])
@@ -104,7 +109,7 @@ class MixedNoise(Likelihood):
         ret = np.zeros_like(args[0])
         for i, lik in enumerate(self.likelihoods_list):
             index = output_index == i
-            args_i = [arg[index] for arg in args]
+            args_i = [arg[index] if isinstance(arg, np.ndarray) else arg for arg in args]
             Y_metadata_i = {k: v[index] for k, v in Y_metadata.items()}
             ret[index] = lik.__getattribute__(func_name)(*args_i, Y_metadata=Y_metadata_i)
 

@@ -55,3 +55,12 @@ class GPDistillation(GP):
 
         super(GPDistillation, self).__init__(Xall, Yall, kernel, likelihood, name=name,
                                              Y_metadata=Y_metadata, inference_method=ep)
+
+    def predict(self, Xnew, full_cov=False, Y_metadata=None, kern=None, likelihood=None, include_likelihood=True):
+        Xnew, _, output_index = util.multioutput.build_XY([Xnew])
+        if Y_metadata is None:
+            Y_metadata = {}
+
+        Y_metadata['output_index'] = output_index
+        return super(GPDistillation, self).predict(Xnew, full_cov=full_cov, Y_metadata=Y_metadata, kern=kern,
+                                                   likelihood=likelihood, include_likelihood=include_likelihood)

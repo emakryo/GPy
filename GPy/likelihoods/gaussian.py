@@ -90,9 +90,6 @@ class Gaussian(Likelihood):
             warnings.warn("variance is too small: %f" % self.variance)
 
         sigma2_hat = 1./(1./self.variance + tau_i)
-        if abs(data_i/self.variance + v_i)/max(abs(data_i/self.variance), abs(v_i)) < 0.01:
-            warnings.warn("cancellation of digits")
-
         mu_hat = sigma2_hat*(data_i/self.variance + v_i)
         sum_var = self.variance + 1./tau_i
         Z_hat = 1./np.sqrt(2.*np.pi*sum_var)*np.exp(-.5*(data_i - v_i/tau_i)**2./sum_var)
@@ -108,10 +105,10 @@ class Gaussian(Likelihood):
             var += self.variance
         return mu, var
 
-    def predictive_mean(self, mu, sigma):
+    def predictive_mean(self, mu, sigma, Y_metadata=None):
         return mu
 
-    def predictive_variance(self, mu, sigma, predictive_mean=None):
+    def predictive_variance(self, mu, sigma, predictive_mean=None, Y_metadata=None):
         return self.variance + sigma**2
 
     def predictive_quantiles(self, mu, var, quantiles, Y_metadata=None):

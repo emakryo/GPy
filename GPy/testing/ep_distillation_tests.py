@@ -32,7 +32,7 @@ class TestDistilltionModels(unittest.TestCase):
         m = GPy.models.GPDistillation(self.X, self.Y, self.S)
         m.randomize()
         print(m)
-        assert m.checkgrad(verbose=True)
+        assert m.checkgrad(verbose=True, tolerance=1e-2)
         fm, fv = m.predict_noiseless(self.Xgrid_1d)
 
     def testGPDistillation_linear(self):
