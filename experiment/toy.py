@@ -7,6 +7,7 @@ import datasets
 
 
 def toy1(n_train=200, n_test=10000, dim=50, rep=100, verbose=False):
+    print("toy1")
     dist_result = []
     plain_result = []
     priv_result = []
@@ -58,7 +59,8 @@ def toy1(n_train=200, n_test=10000, dim=50, rep=100, verbose=False):
     print("plain", np.mean(plain_result), np.std(plain_result))
     print("privileged", np.mean(priv_result), np.std(priv_result))
 
-def toy2(n_train=200, n_test=10000, dim=50, rep=100, verbose=True):
+def toy2(n_train=200, n_test=10000, dim=50, rep=100, verbose=False):
+    print("toy2")
     dist_result = []
     plain_result = []
     priv_result = []
@@ -102,4 +104,4 @@ def toy2(n_train=200, n_test=10000, dim=50, rep=100, verbose=True):
 
 
 if __name__ == "__main__":
-    toy2(rep=2)
+    toy2()
