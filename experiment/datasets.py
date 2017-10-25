@@ -22,5 +22,5 @@ def toy2(n_data=200, dim=50):
     alpha = np.random.randn(dim, 1)
     s = np.random.randn(n_data, dim)
     x = s + np.random.randn(n_data, dim)
-    y = np.sign(x @ alpha)
+    y = np.sign(s @ alpha)
     return x, y, s

@@ -27,7 +27,7 @@ class GPDistillation(GP):
     :type kernel_name: string
     """
     def __init__(self, X, Y, S, kernel=None, likelihoods_list=None,
-                 name='GPD', kernel_name='dual_task'):
+                 name='gp_distillation', kernel_name='dual_task'):
 
         # Input and Output
         Xall, Yall, self.output_index = util.multioutput.build_XY([X, X], [Y, S])
