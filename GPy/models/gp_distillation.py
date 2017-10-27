@@ -64,3 +64,8 @@ class GPDistillation(GP):
         Y_metadata['output_index'] = output_index
         return super(GPDistillation, self).predict(Xnew, full_cov=full_cov, Y_metadata=Y_metadata, kern=kern,
                                                    likelihood=likelihood, include_likelihood=include_likelihood)
+
+    def posterior_samples_f(self, X, size=10, full_cov=True, **predict_kwargs):
+        X, _, _ = util.multioutput.build_XY([X])
+        return super(GPDistillation, self).posterior_samples_f(X, size=size, full_cov=full_cov, **predict_kwargs)
+
