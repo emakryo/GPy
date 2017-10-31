@@ -1,5 +1,6 @@
 # Copyright (c) 2012-2014, GPy authors (see AUTHORS.txt).
 # Licensed under the BSD 3-clause license (see LICENSE.txt)
+import warnings
 import numpy as np
 from ...util.linalg import jitchol, DSYR, dtrtrs, dtrtri, pdinv, dpotrs, tdot, symmetrify
 from paramz import ObsAr
@@ -261,6 +262,8 @@ class EP(EPBase, ExactGaussianInference):
             self.ga_approx_old = gaussianApproximation(ga_approx.v.copy(), ga_approx.tau.copy())
             iterations += 1
 
+        if iterations == self.max_iters:
+            warnings.warn("Loop count reached max_iter")
         # Z_tilde after removing the terms that can lead to infinite terms due to tau_tilde close to zero.
         # This terms cancel with the coreresponding terms in the marginal loglikelihood
         log_Z_tilde = self._log_Z_tilde(marg_moments, ga_approx, cav_params)

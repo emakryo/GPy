@@ -1,3 +1,4 @@
+import numpy as np
 from ..inference.latent_function_inference import EP
 from ..core import GP
 from .. import likelihoods
@@ -27,7 +28,7 @@ class GPDistillation(GP):
     :type kernel_name: string
     """
     def __init__(self, X, Y, S, kernel=None, likelihoods_list=None,
-                 name='gp_distillation', kernel_name='dual_task'):
+                 name='gp_distillation', kernel_name='dual_task', max_iters=np.inf):
 
         # Input and Output
         Xall, Yall, self.output_index = util.multioutput.build_XY([X, X], [Y, S])
@@ -43,12 +44,12 @@ class GPDistillation(GP):
         if likelihoods_list is not None:
             assert len(likelihoods_list) == 2, "Invalid likelihoods length %d" % len(likelihoods_list)
         else:
-            likelihoods_list = [likelihoods.Bernoulli(), likelihoods.Gaussian()]
+            likelihoods_list = [likelihoods.Bernoulli(), likelihoods.GaussianPV()]
 
         likelihood = util.multioutput.build_likelihood([Y, S], self.output_index, likelihoods_list)
 
         # Inference
-        ep = EP(ep_mode='nested')
+        ep = EP(ep_mode='nested', max_iters=max_iters)
 
         # Miscellaneous
         Y_metadata = {'output_index': self.output_index}

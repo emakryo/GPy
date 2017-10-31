@@ -47,6 +47,7 @@ class DualTask(Coregionalize):
         else:
             assert 0 < rho < 1
 
+        self.output_dim = 2
         self.rho = Param('rho', rho, Logistic(lower=0., upper=1.))
         self.link_parameters(self.rho)
 

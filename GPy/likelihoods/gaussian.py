@@ -16,7 +16,7 @@ from scipy import stats, special
 from . import link_functions
 from .likelihood import Likelihood
 from ..core.parameterization import Param
-from paramz.transformations import Logexp
+from paramz.transformations import Logexp, Logistic
 from scipy import stats
 import warnings
 
@@ -372,3 +372,19 @@ class HeteroscedasticGaussian(Gaussian):
     def predictive_quantiles(self, mu, var, quantiles, Y_metadata=None):
         _s = self.variance[Y_metadata['output_index'].flatten()]
         return  [stats.norm.ppf(q/100.)*np.sqrt(var + _s) + mu for q in quantiles]
+
+class GaussianPV(Gaussian):
+    def __init__(self, gp_link=None, variance=1., name='Gaussian_noise_positive_variance'):
+        if gp_link is None:
+            gp_link = link_functions.Identity()
+
+        if not isinstance(gp_link, link_functions.Identity):
+            warnings.warn("Exact inference is not implemeted for non-identity link functions, if you are not already, ensure Laplace inference_method is used")
+
+        super(Gaussian, self).__init__(gp_link, name=name)
+
+        self.variance = Param('variance', variance, Logistic(lower=1e-3, upper=10))
+        self.link_parameter(self.variance)
+
+        if isinstance(gp_link, link_functions.Identity):
+            self.log_concave = True
