@@ -637,6 +637,21 @@ class DualTaskKernelTest(unittest.TestCase):
         self.y = np.random.randn(self.N, 1)
         self.gauss = GPy.likelihoods.Gaussian()
 
+    def test_simple(self):
+        rho = 0.2
+        x = np.array([[0], [1], [0]])
+        kern = GPy.kern.DualTask(1, rho=rho)
+        self.assertTrue(np.allclose(kern.K(x), np.array([[1, rho, 1],
+                                                         [rho, 1, rho],
+                                                         [1, rho, 1]])))
+
+    def test_prod_simple(self):
+        rho = 0.2
+        x = np.arange(2).reshape(-1, 1)
+        xi, _, _ = GPy.util.multioutput.build_XY([x, x])
+        kern = GPy.kern.RBF(1).prod(GPy.kern.DualTask(1, rho=rho, active_dims=[1]))
+        self.assertTrue(np.allclose(kern.K(xi), np.kron([[1, rho], [rho, 1]], GPy.kern.RBF(1).K(x))))
+
     def test_single(self):
         kern = GPy.kern.DualTask(1)
         self.assertTrue(check_kernel_gradient_functions(kern, X=self.X, X2=self.X2, verbose=verbose, fixed_X_dims=-1))
@@ -651,7 +666,6 @@ class DualTaskKernelTest(unittest.TestCase):
                            inference_method=GPy.inference.latent_function_inference.EP(ep_mode='nested'))
         m_ep.randomize()
         assert m_ep.checkgrad(verbose=True)
-
 
 @unittest.skipIf(not config.getboolean('cython', 'working'),"Cython modules have not been built on this machine")
 class Coregionalize_cython_test(unittest.TestCase):
