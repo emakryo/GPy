@@ -2,7 +2,7 @@ import unittest
 import numpy as np
 import GPy
 
-class TestDistilltionModels(unittest.TestCase):
+class TestPrivTransferModels(unittest.TestCase):
     def setUp(self):
         random_state = 0
         generator = np.random.RandomState(random_state)
@@ -10,8 +10,10 @@ class TestDistilltionModels(unittest.TestCase):
         self.dim = 1
         self.n_samples = 10
         self.X = generator.rand(self.n_samples, self.dim) * 10
-        self.S = generator.multivariate_normal(np.zeros(self.n_samples),
-                 GPy.kern.RBF(self.dim).K(self.X) + 0.05 * np.eye(self.n_samples)).reshape(-1, 1)
+        self.S = generator.multivariate_normal(
+            np.zeros(self.n_samples),
+            GPy.kern.RBF(self.dim).K(self.X) + 0.05 * np.eye(self.n_samples)
+        ).reshape(-1, 1)
         # self.S = -self.X - 0.5
         self.Y = np.sign(self.S)
 
@@ -29,8 +31,8 @@ class TestDistilltionModels(unittest.TestCase):
         self.n_grid = None
         self.Xgrid_1d = None
 
-    def testGPDistillation(self):
-        m = GPy.models.GPDistillation(self.X, self.Y, self.S)
+    def testGPPrivTransfer(self):
+        m = GPy.models.GPPrivTransfer(self.X, self.Y, self.S)
         m.randomize()
         print(m)
         assert m.checkgrad(verbose=True, tolerance=1e-2)
@@ -41,8 +43,8 @@ class TestDistilltionModels(unittest.TestCase):
         fm, fv = m.predict_noiseless(self.Xgrid_1d)
 
 
-    def testGPDistillation_linear(self):
-        m = GPy.models.GPDistillation(self.X, self.Y, self.S, kernel=self.linear)
+    def testGPPrivTransfer_linear(self):
+        m = GPy.models.GPPrivTransfer(self.X, self.Y, self.S, kernel=self.linear)
         m.randomize()
         print(m)
         assert m.checkgrad(verbose=True)

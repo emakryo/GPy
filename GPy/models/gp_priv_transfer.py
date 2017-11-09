@@ -6,9 +6,9 @@ from .. import kern
 from .. import util
 
 
-class GPDistillation(GP):
+class GPPrivTransfer(GP):
     """
-    Gaussian Process model for distillation from soft labels
+    Gaussian Process model for transferring privilege information from soft labels
 
     This is a thin wrapper around the models.GP class, with a set of sensible defaults
 
@@ -18,7 +18,7 @@ class GPDistillation(GP):
     :type Y: numpy arrays
     :param S: observed soft labels
     :tye S: numpy arrays
-    :param kernel: a GPy kernel ** DualTask, defaults to RBF ** DualTask
+    :param kernel: a GPy kernel, defaults to RBF
     :type kernel: None | GPy.kernel defaults
     :likelihoods_list: a list of likelihoods, defaults to a pair of Bernoulli & Gaussian likelihoods
     :type likelihoods_list None | a list GPy.likelihoods
@@ -28,7 +28,7 @@ class GPDistillation(GP):
     :type kernel_name: string
     """
     def __init__(self, X, Y, S, kernel=None, likelihoods_list=None,
-                 name='gp_distillation', kernel_name='dual_task', max_iters=np.inf):
+                 name='gp_priv_transfer', kernel_name='dual_task', max_iters=np.inf):
 
         # Input and Output
         Xall, Yall, self.output_index = util.multioutput.build_XY([X, X], [Y, S])
@@ -54,7 +54,7 @@ class GPDistillation(GP):
         # Miscellaneous
         Y_metadata = {'output_index': self.output_index}
 
-        super(GPDistillation, self).__init__(Xall, Yall, kernel, likelihood, name=name,
+        super(GPPrivTransfer, self).__init__(Xall, Yall, kernel, likelihood, name=name,
                                              Y_metadata=Y_metadata, inference_method=ep)
 
     def predict(self, Xnew, full_cov=False, Y_metadata=None, kern=None, likelihood=None, include_likelihood=True):
@@ -63,10 +63,9 @@ class GPDistillation(GP):
             Y_metadata = {}
 
         Y_metadata['output_index'] = output_index
-        return super(GPDistillation, self).predict(Xnew, full_cov=full_cov, Y_metadata=Y_metadata, kern=kern,
+        return super(GPPrivTransfer, self).predict(Xnew, full_cov=full_cov, Y_metadata=Y_metadata, kern=kern,
                                                    likelihood=likelihood, include_likelihood=include_likelihood)
 
     def posterior_samples_f(self, X, size=10, full_cov=True, **predict_kwargs):
         X, _, _ = util.multioutput.build_XY([X])
-        return super(GPDistillation, self).posterior_samples_f(X, size=size, full_cov=full_cov, **predict_kwargs)
-
+        return super(GPPrivTransfer, self).posterior_samples_f(X, size=size, full_cov=full_cov, **predict_kwargs)
