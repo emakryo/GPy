@@ -23,10 +23,12 @@ class MixedNoise(Likelihood):
         self.not_block_really = False
 
     def gaussian_variance(self, Y_metadata):
-        assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])
         ind = Y_metadata['output_index'].flatten()
+        assert all([isinstance(self.likelihoods_list[i], Gaussian) for i in np.unique(ind)])
         variance = np.zeros(ind.size)
-        for lik, j in zip(self.likelihoods_list, range(len(self.likelihoods_list))):
+        for j, lik in enumerate(self.likelihoods_list):
+            if j not in np.unique(ind):
+                continue
             variance[ind==j] = lik.variance
         return variance
 
@@ -38,9 +40,27 @@ class MixedNoise(Likelihood):
         self.gradient = gradients
 
     def exact_inference_gradients(self, dL_dKdiag, Y_metadata):
-        assert all([isinstance(l, Gaussian) for l in self.likelihoods_list])
-        ind = Y_metadata['output_index'].flatten()
-        return np.array([dL_dKdiag[ind==i].sum() for i in range(len(self.likelihoods_list))])
+        idx = Y_metadata['output_index'].flatten()
+        ret = np.zeros(self.size)
+        if self.size == 0:
+            return ret
+
+        param_idx = 0
+        uniq_idx = np.unique(idx)
+        for i, lik in enumerate(self.likelihoods_list):
+            if lik.size == 0:
+                continue
+
+            if i not in uniq_idx:
+                param_idx += lik.size
+                continue
+
+            ret[param_idx:param_idx+lik.size] = lik.exact_inference_gradients(
+                dL_dKdiag[idx==i], {k: v[idx==i] for k, v in Y_metadata.items()}
+            )
+            param_idx += lik.size
+
+        return ret
 
     def predictive_values(self, mu, var, full_cov=False, Y_metadata=None):
         if all([isinstance(l, Gaussian) for l in self.likelihoods_list]):

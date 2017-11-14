@@ -6,6 +6,7 @@ class TestPrivTransferModels(unittest.TestCase):
     def setUp(self):
         random_state = 0
         generator = np.random.RandomState(random_state)
+        self.generator = generator
 
         self.dim = 1
         self.n_samples = 10
@@ -33,19 +34,39 @@ class TestPrivTransferModels(unittest.TestCase):
 
     def testGPPrivTransfer(self):
         m = GPy.models.GPPrivTransfer(self.X, self.Y, self.S)
-        m.randomize()
+        m.randomize(self.generator.normal)
         print(m)
         assert m.checkgrad(verbose=True, tolerance=1e-2)
-        m.optimize()
         print(m)
         assert m.checkgrad(verbose=True, tolerance=1e-2)
         # assert m.log_likelihood() < 0
         fm, fv = m.predict_noiseless(self.Xgrid_1d)
 
 
+    def testConditionalEP(self):
+        m0 = GPy.models.GPPrivTransfer(self.X, self.Y, self.S)
+        m1 = GPy.models.GPPrivTransfer(self.X, self.Y, self.S)
+        m1.inference_method = GPy.inference.latent_function_inference.EP(ep_mode='nested')
+        m1.parameters_changed()
+        m2 = GPy.models.GPRegression(self.X, self.S)
+
+        print(m0)
+        print(m1)
+        print(m2)
+
+        assert np.allclose(m0.log_likelihood(), m1.log_likelihood() - m2.log_likelihood())
+        assert m0.checkgrad(verbose=True)
+        assert m1.checkgrad(verbose=True)
+        assert m2.checkgrad(verbose=True)
+
+        dL_dK = m1.grad_dict['dL_dK']
+        dL_dK[self.n_samples:, self.n_samples:] -= m2.grad_dict['dL_dK']
+        assert np.allclose(m0.grad_dict['dL_dK'], dL_dK)
+
+
     def testGPPrivTransfer_linear(self):
         m = GPy.models.GPPrivTransfer(self.X, self.Y, self.S, kernel=self.linear)
-        m.randomize()
+        m.randomize(self.generator.normal)
         print(m)
         assert m.checkgrad(verbose=True)
         m.optimize()
@@ -62,7 +83,7 @@ class TestPrivTransferModels(unittest.TestCase):
         m = GPy.core.GP(X, Y, kernel=kernel, likelihood=likelihood,
                         inference_method=GPy.inference.latent_function_inference.EP(ep_mode='nested', max_iters=500)
                         )
-        m.randomize()
+        m.randomize(self.generator.normal)
         print(m)
         assert m.checkgrad(verbose=True)
         m.optimize()
@@ -70,8 +91,6 @@ class TestPrivTransferModels(unittest.TestCase):
         assert m.checkgrad(verbose=True)
         # assert m.log_likelihood() < 0
 
-    def testLikelihood(self):
-        pass
 
 if __name__ == "__main__":
     unittest.main()

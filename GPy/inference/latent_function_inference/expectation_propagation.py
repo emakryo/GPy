@@ -58,8 +58,10 @@ class gaussianApproximation(object):
         self.v[i] += delta_v
 
         return (delta_tau, delta_v)
+
     def to_dict(self):
         return {"tau": self.tau.tolist(), "v": self.v.tolist()}
+
     @staticmethod
     def from_dict(input_dict):
         return gaussianApproximation(np.array(input_dict["v"]), np.array(input_dict["tau"]))
@@ -86,20 +88,20 @@ class posteriorParams(posteriorParamsBase):
         ci = delta_tau/(1.+ delta_tau*self.Sigma_diag[i])
         DSYR(self.Sigma, self.Sigma[:,i].copy(), -ci)
         self.mu = np.dot(self.Sigma, ga_approx.v)
+
     def to_dict(self):
         #TODO: Implement a more memory efficient variant
         if self.L is None:
             return { "mu": self.mu.tolist(), "Sigma": self.Sigma.tolist()}
         else:
             return { "mu": self.mu.tolist(), "Sigma": self.Sigma.tolist(), "L": self.L.tolist()}
+
     @staticmethod
     def from_dict(input_dict):
         if "L" in input_dict:
             return posteriorParams(np.array(input_dict["mu"]), np.array(input_dict["Sigma"]), np.array(input_dict["L"]))
         else:
             return posteriorParams(np.array(input_dict["mu"]), np.array(input_dict["Sigma"]))
-
-
 
     @staticmethod
     def _recompute(K, ga_approx):
@@ -316,7 +318,6 @@ class EP(EPBase, ExactGaussianInference):
                 + 0.5*(cav_params.v * ( ( (ga_approx.tau/cav_params.tau) * cav_params.v - 2.0 * ga_approx.v ) * 1./(cav_params.tau + ga_approx.tau)))))
 
 
-
     def _ep_marginal(self, K, ga_approx, Z_tilde):
         post_params = posteriorParams._recompute(K, ga_approx)
 
@@ -347,9 +348,9 @@ class EP(EPBase, ExactGaussianInference):
     def to_dict(self):
         input_dict = super(EP, self)._to_dict()
         input_dict["class"] = "GPy.inference.latent_function_inference.expectation_propagation.EP"
-        if self.ga_approx_old is not  None:
+        if self.ga_approx_old is not None:
             input_dict["ga_approx_old"] = self.ga_approx_old.to_dict()
-        if self._ep_approximation is not  None:
+        if self._ep_approximation is not None:
             input_dict["_ep_approximation"] = {}
             input_dict["_ep_approximation"]["post_params"] = self._ep_approximation[0].to_dict()
             input_dict["_ep_approximation"]["ga_approx"] = self._ep_approximation[1].to_dict()
@@ -374,6 +375,34 @@ class EP(EPBase, ExactGaussianInference):
         ee.ga_approx_old = ga_approx_old
         ee._ep_approximation = _ep_approximation
         return ee
+
+
+class EPConditional(EP):
+    def _inference(self, Y, K, ga_approx, cav_params, likelihood, Z_tilde, Y_metadata=None):
+        full_posterior, full_log_marginal, full_grad_dict = super(EPConditional, self)._inference(
+            Y, K, ga_approx, cav_params, likelihood, Z_tilde, Y_metadata
+        )
+        cond_idx = Y_metadata['conditional_index'].flatten()
+
+        cond_Y_metadata = {k: v[cond_idx] for k, v in Y_metadata.items()}
+        cond_posterior, cond_log_marginal, cond_grad_dict = ExactGaussianInference().inference(
+            None, None, likelihood, Y[cond_idx], Y_metadata=cond_Y_metadata,
+            K=K[np.ix_(cond_idx, cond_idx)]
+        )
+        cond_dL_dK = np.zeros_like(full_grad_dict['dL_dK'])
+        cond_dL_dK[np.ix_(cond_idx, cond_idx)] = cond_grad_dict['dL_dK']
+        cond_dL_dthetaL = cond_grad_dict['dL_dthetaL']
+        cond_dL_dm = np.zeros_like(full_grad_dict['dL_dm'])
+        cond_dL_dm[cond_idx] = cond_grad_dict['dL_dm']
+
+        grad_dict = {
+            'dL_dK': full_grad_dict['dL_dK']-cond_dL_dK,
+            'dL_dthetaL': full_grad_dict['dL_dthetaL']-cond_dL_dthetaL,
+            'dL_dm': full_grad_dict['dL_dm']-cond_dL_dm
+        }
+
+        return full_posterior, full_log_marginal-cond_log_marginal, grad_dict
+
 
 class EPDTC(EPBase, VarDTC):
     def inference(self, kern, X, Z, likelihood, Y, mean_function=None, Y_metadata=None, Lm=None, dL_dKmm=None, psi0=None, psi1=None, psi2=None):

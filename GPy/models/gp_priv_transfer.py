@@ -1,5 +1,5 @@
 import numpy as np
-from ..inference.latent_function_inference import EP
+from ..inference.latent_function_inference import EP, EPConditional
 from ..core import GP
 from .. import likelihoods
 from .. import kern
@@ -49,10 +49,12 @@ class GPPrivTransfer(GP):
         likelihood = util.multioutput.build_likelihood([Y, S], self.output_index, likelihoods_list)
 
         # Inference
-        ep = EP(ep_mode='nested', max_iters=max_iters)
+        ep = EPConditional(ep_mode='nested', max_iters=max_iters)
+        # ep = EP(ep_mode='nested', max_iters=max_iters)
 
         # Miscellaneous
-        Y_metadata = {'output_index': self.output_index}
+        Y_metadata = {'output_index': self.output_index,
+                      'conditional_index': self.output_index != 0}
 
         super(GPPrivTransfer, self).__init__(Xall, Yall, kernel, likelihood, name=name,
                                              Y_metadata=Y_metadata, inference_method=ep)
