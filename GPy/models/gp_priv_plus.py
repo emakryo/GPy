@@ -2,6 +2,8 @@ import warnings
 import numpy as np
 from ..core import Model
 from .. import kern
+from ..likelihoods import Bernoulli
+from ..likelihoods.link_functions import Heaviside
 from ..inference.latent_function_inference.posterior import PosteriorEP
 
 epsilon = np.finfo(np.float64).eps
@@ -15,12 +17,12 @@ class GPPrivPlus(Model):
         self.Y = Y
         self.Xstar = Xstar
         if kernel is None:
-            self.kernel = kern.RBF(X.shape[1]) + kern.White(X.shape[1], variance=1e-3)
+            self.kernel = kern.RBF(X.shape[1])
         else:
             self.kernel = kernel
 
         if kernel_star is None:
-            self.kernel_star = kern.RBF(Xstar.shape[1]) + kern.White(Xstar.shape[1], variance=1e-3)
+            self.kernel_star = kern.RBF(Xstar.shape[1])
         else:
             self.kernel_star = kernel_star
 
@@ -42,6 +44,12 @@ class GPPrivPlus(Model):
 
     def log_likelihood(self):
         return self._log_marginal_likelihood
+
+    def predict(self, Xnew, full_cov=False, include_likelihood=True):
+        mu, var = self.posterior._raw_predict(self.kernel, Xnew, pred_var=self.X, full_cov=full_cov)
+        if include_likelihood:
+            mu, var = Bernoulli(Heaviside()).predictive_values(mu, var, full_cov=full_cov)
+        return mu, var
 
     def _ep(self, K, Kstar, Y, dumping=0.5):
         site, site_star, post, post_star = self._init_ep(K, Kstar)
