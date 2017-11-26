@@ -401,9 +401,9 @@ class EP(EPBase, ExactGaussianInference):
 
 
 class EPConditional(EP):
-    def _inference(self, Y, K, ga_approx, cav_params, likelihood, Z_tilde, Y_metadata=None):
+    def _inference(self, Y, mean_prior, K, ga_approx, cav_params, likelihood, Z_tilde, Y_metadata=None):
         full_posterior, full_log_marginal, full_grad_dict = super(EPConditional, self)._inference(
-            Y, K, ga_approx, cav_params, likelihood, Z_tilde, Y_metadata
+            Y, mean_prior, K, ga_approx, cav_params, likelihood, Z_tilde, Y_metadata
         )
         cond_idx = Y_metadata['conditional_index'].flatten()
 
