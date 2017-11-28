@@ -29,6 +29,7 @@ class GPPrivPlus(Model):
         self.link_parameter(self.kernel)
         self.link_parameter(self.kernel_star)
 
+        self.site = self.site_star = None
         self.posterior = None
         self._log_marginal_likelihood = None
         self.grad_dict = None
@@ -51,16 +52,17 @@ class GPPrivPlus(Model):
             mu, var = Bernoulli(Heaviside()).predictive_values(mu, var, full_cov=full_cov)
         return mu, var
 
-    def _ep(self, K, Kstar, Y, dumping=0.5):
+    def _ep(self, K, Kstar, Y, damping=1.0):
         site, site_star, post, post_star = self._init_ep(K, Kstar)
         log_Z = np.zeros(site.n)
         converged = False
 
-        for _ in range(self.max_iter):
+        for loop in range(self.max_iter):
+            print(loop,"th iteration")
             old_site = site.copy()
             old_site_star = site_star.copy()
 
-            #order = np.random.permutation(site.n)
+            # order = np.random.permutation(site.n)
             order = range(site.n)
             for i in order:
                 cav = CavParam(i, site, post)
@@ -68,8 +70,8 @@ class GPPrivPlus(Model):
 
                 nu, tau, nu_star, tau_star, log_Z[i] = self._next_site(cav, cav_star, Y.flat[i])
 
-                site.update(i, nu, tau, dumping=dumping)
-                site_star.update(i, nu_star, tau_star, dumping=dumping)
+                site.update(i, nu, tau, damping=damping)
+                site_star.update(i, nu_star, tau_star, damping=damping)
 
                 post.local_update(i, old_site, site)
                 post_star.local_update(i, old_site_star, site_star)
@@ -86,7 +88,13 @@ class GPPrivPlus(Model):
         self.site = site
         self.site_star = site_star
 
-        posterior = PosteriorEP(mean=post.mean, cov=post.cov)
+        sqrt_tau = np.sqrt(site.tau)
+        B = np.eye(site.n) + sqrt_tau[:, None] * K * sqrt_tau
+        Lsqrt_tau = np.linalg.solve(np.linalg.cholesky(B), np.diag(sqrt_tau))
+        Winv = Lsqrt_tau.T.dot(Lsqrt_tau)
+        alpha = (site.nu - sqrt_tau * np.linalg.solve(B, sqrt_tau * K.dot(site.nu))).reshape(-1, 1)
+        posterior = PosteriorEP(woodbury_inv=Winv, woodbury_vector=alpha, K=K)
+        # posterior = PosteriorEP(mean=post.mean, cov=post.cov, K=K)
         log_z0 = self._log_marginal_likelihood_without_constant(post, site, K)
         log_z1 = self._log_marginal_likelihood_without_constant(post_star, site_star, Kstar)
         log_marginal_likelihood = float(
@@ -97,9 +105,16 @@ class GPPrivPlus(Model):
                      'dL_dKstar': site_star.dlml_dK(Kstar)}
         return posterior, log_marginal_likelihood, grad_dict
 
-    def _init_ep(self, K, Kstar):
+    def _init_ep(self, K, Kstar, force_init=False, damping=0.9):
         n = K.shape[0]
-        return SiteParam(n), SiteParam(n), PostParam(K), PostParam(Kstar)
+        if force_init or self.site is None:
+            return SiteParam(n), SiteParam(n), PostParam(K), PostParam(Kstar)
+        else:
+            site = SiteParam(n).init_damping(self.site, damping)
+            site_star = SiteParam(n).init_damping(self.site_star, damping)
+            return (site, site_star,
+                    PostParam(K).full_update(K, site),
+                    PostParam(Kstar).full_update(Kstar, site_star))
 
     def _converged(self, site, site_star, old_site, old_site_star):
         if old_site is None or old_site_star is None:
@@ -188,6 +203,12 @@ class SiteParam:
         self.rtol = rtol
         self.atol = atol
 
+    def init_damping(self, other, damping):
+        self.n = other.n
+        self.nu = damping * other.nu
+        self.tau = damping * other.tau
+        return self
+
     def copy(self):
         site = SiteParam(self.n)
         site.nu = self.nu.copy()
@@ -198,9 +219,9 @@ class SiteParam:
         return (np.allclose(self.nu, other.nu, rtol=self.rtol, atol=self.atol) and
                 np.allclose(self.tau, other.tau, rtol=self.rtol, atol=self.atol))
 
-    def update(self, i, nu, tau, dumping=1.0):
-        self.nu[i] = dumping * nu + (1-dumping) * self.nu[i]
-        self.tau[i] = dumping * tau + (1-dumping) * self.tau[i]
+    def update(self, i, nu, tau, damping=1.0):
+        self.nu[i] = damping * nu + (1 - damping) * self.nu[i]
+        self.tau[i] = damping * tau + (1 - damping) * self.tau[i]
 
     def dlml_dK(self, K):
         sqrt_tau = np.sqrt(self.tau)
@@ -220,6 +241,7 @@ class PostParam:
                      (1 + (site.tau - old_site.tau) * self.cov[i, i]) *
                      self.cov[i, :, None].dot(self.cov[None, i]))
         self.mean = self.cov.dot(site.nu)
+        return self
 
     def full_update(self, K, site):
         sqrt_tau = np.sqrt(site.tau)
@@ -227,6 +249,7 @@ class PostParam:
         V = np.linalg.solve(chol_B, sqrt_tau[:, None] * K)
         self.cov = K - V.T.dot(V)
         self.mean = self.cov.dot(site.nu)
+        return self
 
 
 class CavParam:
