@@ -17,14 +17,16 @@ class TestGPPrivPlus(unittest.TestCase):
         ).reshape(-1, 1)
         y = (np.random.rand(n_all, 1) < norm.cdf(Xstar))
 
-        n_train = 20
+        n_train = 10
         Xtr = X[:n_train]
         Xtr_star = Xstar[:n_train]
         ytr = y[:n_train]
         Xte = X[n_train:]
         yte = y[n_train:]
 
-        m = GPy.models.GPPrivPlus(Xtr, ytr, Xtr_star)
+        mean_star = GPy.mappings.Constant(d, 1, -1.)
+        mean_star.C.constrain_fixed()
+        m = GPy.models.GPPrivPlus(Xtr, ytr, Xtr_star, mean_star=mean_star)
         print(m)
         self.assertTrue(m.checkgrad(verbose=True, tolerance=3e-2))
 
