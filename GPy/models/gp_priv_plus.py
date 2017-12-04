@@ -46,6 +46,7 @@ class GPPrivPlus(Model):
 
         self.max_iter = 100 if max_iter is None else max_iter
         self.parallel_update = False
+        self.damping = 0.9
 
     def parameters_changed(self):
         K = self.kernel.K(self.X)
@@ -80,7 +81,7 @@ class GPPrivPlus(Model):
             mu, var = Bernoulli(Heaviside()).predictive_values(mu, var, full_cov=full_cov)
         return mu, var
 
-    def _ep(self, K, Kstar, Y, mean, mean_star, damping=1.0):
+    def _ep(self, K, Kstar, Y, mean, mean_star):
         site, site_star, post, post_star = self._init_ep(K, Kstar, mean, mean_star)
         log_Z = np.zeros(site.n)
         converged = False
@@ -98,8 +99,8 @@ class GPPrivPlus(Model):
 
                 nu, tau, nu_star, tau_star, log_Z[i] = self._next_site(cav, cav_star, Y.flat[i])
 
-                site.update(i, nu, tau, damping=damping)
-                site_star.update(i, nu_star, tau_star, damping=damping)
+                site.update(i, nu, tau, damping=self.damping)
+                site_star.update(i, nu_star, tau_star, damping=self.damping)
 
                 if not self.parallel_update:
                     post.local_update(i, old_site, site)
