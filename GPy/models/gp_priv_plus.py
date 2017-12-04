@@ -1,5 +1,8 @@
 import warnings
+import multiprocessing
 import numpy as np
+from scipy.integrate import quad
+from scipy.stats import norm
 from ..core import Model
 from .. import kern
 from ..likelihoods import Bernoulli
@@ -11,11 +14,12 @@ epsilon = np.finfo(np.float64).eps
 
 class GPPrivPlus(Model):
     def __init__(self, X, Y, Xstar, kernel=None, kernel_star=None,
-                 mean=None, mean_star=None, max_iter=None):
+                 mean=None, mean_star=None, max_iter=None, parallel_update=True):
         super(GPPrivPlus, self).__init__("gp_priv_plus")
 
         self.X = X
-        self.Y = Y
+        self.Y = np.where(
+            Y > 0, np.ones_like(Y, dtype=int), -np.ones_like(Y, dtype=int))
         self.Xstar = Xstar
         if kernel is None:
             self.kernel = kern.RBF(X.shape[1])
@@ -45,7 +49,7 @@ class GPPrivPlus(Model):
         self.grad_dict = None
 
         self.max_iter = 100 if max_iter is None else max_iter
-        self.parallel_update = False
+        self.parallel_update = parallel_update
         self.damping = 0.9
 
     def parameters_changed(self):
@@ -82,32 +86,41 @@ class GPPrivPlus(Model):
         return mu, var
 
     def _ep(self, K, Kstar, Y, mean, mean_star):
+        n_data = Y.shape[0]
         site, site_star, post, post_star = self._init_ep(K, Kstar, mean, mean_star)
-        log_Z = np.zeros(site.n)
+        log_Z = np.zeros(n_data)
         converged = False
+
+        pool = multiprocessing.Pool() if self.parallel_update else None
 
         for loop in range(self.max_iter):
             print(loop, "th iteration")
             old_site = site.copy()
             old_site_star = site_star.copy()
 
-            # order = np.random.permutation(site.n)
-            order = range(site.n)
-            for i in order:
-                cav = CavParam(i, site, post)
-                cav_star = CavParam(i, site_star, post_star)
+            if not self.parallel_update:
+                order = np.random.permutation(n_data)
+                for i in order:
+                    cav = CavParam(i, site, post)
+                    cav_star = CavParam(i, site_star, post_star)
 
-                nu, tau, nu_star, tau_star, log_Z[i] = self._next_site(cav, cav_star, Y.flat[i])
+                    nu, tau, nu_star, tau_star, log_Z[i] = _next_site(cav, cav_star, Y.flat[i])
 
-                site.update(i, nu, tau, damping=self.damping)
-                site_star.update(i, nu_star, tau_star, damping=self.damping)
+                    site.update(i, nu, tau, damping=self.damping)
+                    site_star.update(i, nu_star, tau_star, damping=self.damping)
 
-                if not self.parallel_update:
                     post.local_update(i, old_site, site)
                     post_star.local_update(i, old_site_star, site_star)
+            else:
+                args = [(CavParam(i, site, post), CavParam(i, site_star, post_star), Y[i])
+                        for i in range(n_data)]
+                nu, tau, nu_star, tau_star, log_Z = zip(*pool.starmap(_next_site, args))
+                site.update_parallel(np.array(nu), np.array(tau), damping=self.damping)
+                site_star.update_parallel(np.array(nu_star), np.array(tau_star), damping=self.damping)
 
             post.full_update(K, mean, site)
             post_star.full_update(Kstar, mean_star, site_star)
+
             if self._converged(site, site_star, old_site, old_site_star):
                 converged = True
                 break
@@ -156,56 +169,6 @@ class GPPrivPlus(Model):
         return (site.is_close(old_site) and
                 site_star.is_close(old_site_star))
 
-    def _next_site(self, cav, cav_star, y):
-        from scipy.integrate import quad
-        from scipy.stats import norm
-        y = 1 if y > 0 else -1
-
-        Z = quad(
-            lambda g: (norm.cdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                       norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-            -np.inf, np.inf)[0]
-        dZdm = quad(
-            lambda g: (y / np.sqrt(cav.var + np.exp(g)) *
-                       norm.pdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                       norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-            -np.inf, np.inf)[0]
-        d2Zdm2 = quad(
-            lambda g: (-y * cav.mean / np.sqrt(cav.var + np.exp(g)) ** 3 *
-                       norm.pdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                       norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-            -np.inf, np.inf)[0]
-        dZdm_star = quad(
-            lambda g: (norm.cdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                       (g - cav_star.mean) / cav_star.var *
-                       norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-            -np.inf, np.inf)[0]
-        d2Zdm_star2 = quad(
-            lambda g: (norm.cdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                       ((g - cav_star.mean) ** 2 / cav_star.var - 1) / cav_star.var *
-                       norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-            -np.inf, np.inf)[0]
-        nu, tau = self._next_site_common(Z, dZdm, d2Zdm2, cav)
-        nu_star, tau_star = self._next_site_common(Z, dZdm_star, d2Zdm_star2, cav_star)
-        if tau < epsilon:
-            warnings.warn("Tau of site distribution %f < 0" % tau)
-            tau = epsilon
-
-        if tau_star < epsilon:
-            warnings.warn("Tau of noise site distribution %f < 0" % tau_star)
-            tau_star = epsilon
-
-        return nu, tau, nu_star, tau_star, np.log(Z)
-
-    def _next_site_common(self, Z, dZdm, d2Zdm2, cav):
-        alpha = dZdm / Z
-        beta = d2Zdm2 / Z - alpha**2
-        nu = (alpha - cav.mean * beta) / (1 + cav.var * beta)
-        tau = - beta / (1 + cav.var * beta)
-        # z = (np.exp(-0.5 * cav.mean * alpha**2 / (2 + cav.mean * beta)) /
-        #      np.sqrt(2*np.pi*cav.var*(2+cav.var*beta)))
-        return nu, tau
-
     def _log_marginal_likelihood_without_constant(self, post, site, K, mean):
         cav_var = 1 / (1 / np.diag(post.cov) - site.tau)
         cav_mean = cav_var * (post.mean / np.diag(post.cov) - site.nu)
@@ -230,6 +193,53 @@ class GPPrivPlus(Model):
 
     def save_model(self, output_filename, compress=True, save_data=True):
         ...
+
+def _next_site(cav, cav_star, y):
+    Z = quad(
+        lambda g: (norm.cdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
+                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
+        -np.inf, np.inf)[0]
+    dZdm = quad(
+        lambda g: (y / np.sqrt(cav.var + np.exp(g)) *
+                   norm.pdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
+                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
+        -np.inf, np.inf)[0]
+    d2Zdm2 = quad(
+        lambda g: (-y * cav.mean / np.sqrt(cav.var + np.exp(g)) ** 3 *
+                   norm.pdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
+                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
+        -np.inf, np.inf)[0]
+    dZdm_star = quad(
+        lambda g: (norm.cdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
+                   (g - cav_star.mean) / cav_star.var *
+                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
+        -np.inf, np.inf)[0]
+    d2Zdm_star2 = quad(
+        lambda g: (norm.cdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
+                   ((g - cav_star.mean) ** 2 / cav_star.var - 1) / cav_star.var *
+                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
+        -np.inf, np.inf)[0]
+    nu, tau = _next_site_common(Z, dZdm, d2Zdm2, cav)
+    nu_star, tau_star = _next_site_common(Z, dZdm_star, d2Zdm_star2, cav_star)
+    if tau < epsilon:
+        warnings.warn("Tau of site distribution %f < 0" % tau)
+        tau = epsilon
+
+    if tau_star < epsilon:
+        warnings.warn("Tau of noise site distribution %f < 0" % tau_star)
+        tau_star = epsilon
+
+    return nu, tau, nu_star, tau_star, np.log(Z)
+
+
+def _next_site_common(Z, dZdm, d2Zdm2, cav):
+    alpha = dZdm / Z
+    beta = d2Zdm2 / Z - alpha**2
+    nu = (alpha - cav.mean * beta) / (1 + cav.var * beta)
+    tau = - beta / (1 + cav.var * beta)
+    # z = (np.exp(-0.5 * cav.mean * alpha**2 / (2 + cav.mean * beta)) /
+    #      np.sqrt(2*np.pi*cav.var*(2+cav.var*beta)))
+    return nu, tau
 
 
 class SiteParam:
@@ -262,6 +272,10 @@ class SiteParam:
     def update(self, i, nu, tau, damping=1.0):
         self.nu[i] = damping * nu + (1 - damping) * self.nu[i]
         self.tau[i] = damping * tau + (1 - damping) * self.tau[i]
+
+    def update_parallel(self, nu, tau, damping=1.0):
+        self.nu = damping * nu + (1 - damping) * self.nu
+        self.tau = damping * tau + (1 - damping) * self.tau
 
     def dlml_dK(self, K, mean):
         sqrt_tau = np.sqrt(self.tau)
