@@ -13,7 +13,7 @@ class TestGPPrivPlus(unittest.TestCase):
         d = 1
         X = np.random.randn(n_all, d)
         Xstar = np.random.multivariate_normal(
-            np.zeros(n_all), (GPy.kern.RBF(d)+GPy.kern.White(d, variance=0.05)).K(X)
+            np.zeros(n_all), 10 * (GPy.kern.RBF(d)+GPy.kern.White(d, variance=0.05)).K(X)
         ).reshape(-1, 1)
         y = (np.random.rand(n_all, 1) < norm.cdf(Xstar))
 

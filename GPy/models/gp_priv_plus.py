@@ -232,12 +232,13 @@ class GPPrivPlus(Model):
 
 
 class SiteParam:
-    def __init__(self, n, rtol=1e-5, atol=1e-8):
+    def __init__(self, n, epsilon=1e-6, rtol=1e-5, atol=1e-8):
         self.n = n
         self.nu = np.zeros(n)
         self.tau = np.zeros(n)
         self.rtol = rtol
         self.atol = atol
+        self.epsilon = epsilon
 
     def init_damping(self, other, damping):
         self.n = other.n
@@ -252,8 +253,10 @@ class SiteParam:
         return site
 
     def is_close(self, other):
-        return (np.allclose(self.nu, other.nu, rtol=self.rtol, atol=self.atol) and
-                np.allclose(self.tau, other.tau, rtol=self.rtol, atol=self.atol))
+        #return (np.allclose(self.nu, other.nu, rtol=self.rtol, atol=self.atol) and
+        #        np.allclose(self.tau, other.tau, rtol=self.rtol, atol=self.atol))
+        return (np.mean((self.nu-other.nu)**2) < self.epsilon and
+                np.mean((self.tau-other.tau)**2) < self.epsilon)
 
     def update(self, i, nu, tau, damping=1.0):
         self.nu[i] = damping * nu + (1 - damping) * self.nu[i]
