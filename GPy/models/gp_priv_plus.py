@@ -18,7 +18,9 @@ class NegativeVarianceWarning(Warning):
 
 class GPPrivPlus(Model):
     def __init__(self, X, Y, Xstar, kernel=None, kernel_star=None,
-                 mean=None, mean_star=None, max_iter=None, parallel_update=True, ignore_warnings=True):
+                 mean=None, mean_star=None, max_iter=None,
+                 damping=0.9, init_damping=0.,
+                 parallel_update=True, ignore_warnings=True, show_progress=True):
         super(GPPrivPlus, self).__init__("gp_priv_plus")
 
         self.X = X
@@ -54,12 +56,14 @@ class GPPrivPlus(Model):
 
         self.max_iter = 100 if max_iter is None else max_iter
         self.parallel_update = parallel_update
-        self.damping = 0.9
+        self.pool = multiprocessing.Pool() if parallel_update else None
+        self.show_progress = show_progress
+        self.damping = damping
+        self.init_damping = init_damping
 
         if ignore_warnings:
             warnings.simplefilter('ignore', NegativeVarianceWarning)
 
-        self.pool = multiprocessing.Pool() if parallel_update else None
 
     def parameters_changed(self):
         K = self.kernel.K(self.X)
@@ -101,7 +105,6 @@ class GPPrivPlus(Model):
         converged = False
 
         for loop in range(self.max_iter):
-            print(loop, "th iteration")
             old_site = site.copy()
             old_site_star = site_star.copy()
 
@@ -127,6 +130,9 @@ class GPPrivPlus(Model):
 
             post.full_update(K, mean, site)
             post_star.full_update(Kstar, mean_star, site_star)
+
+            if self.show_progress:
+                print(loop, "th iteration:")
 
             if self._converged(site, site_star, old_site, old_site_star):
                 converged = True
@@ -158,13 +164,13 @@ class GPPrivPlus(Model):
                      'dL_dm_star': site.dlml_dm(Kstar, mean_star)}
         return posterior, log_marginal_likelihood, grad_dict
 
-    def _init_ep(self, K, Kstar, mean, mean_star, force_init=False, damping=0.9):
+    def _init_ep(self, K, Kstar, mean, mean_star, force_init=False):
         n = K.shape[0]
         if force_init or self.site is None:
             return SiteParam(n), SiteParam(n), PostParam(K, mean), PostParam(Kstar, mean_star)
         else:
-            site = SiteParam(n).init_damping(self.site, damping)
-            site_star = SiteParam(n).init_damping(self.site_star, damping)
+            site = SiteParam(n).init_damping(self.site, self.init_damping)
+            site_star = SiteParam(n).init_damping(self.site_star, self.init_damping)
             return (site, site_star,
                     PostParam(K, mean, site),
                     PostParam(Kstar, mean_star, site_star))
