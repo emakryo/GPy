@@ -12,9 +12,13 @@ from ..inference.latent_function_inference.posterior import PosteriorEP
 epsilon = np.finfo(np.float64).eps
 
 
+class NegativeVarianceWarning(Warning):
+    ...
+
+
 class GPPrivPlus(Model):
     def __init__(self, X, Y, Xstar, kernel=None, kernel_star=None,
-                 mean=None, mean_star=None, max_iter=None, parallel_update=True):
+                 mean=None, mean_star=None, max_iter=None, parallel_update=True, ignore_warnings=True):
         super(GPPrivPlus, self).__init__("gp_priv_plus")
 
         self.X = X
@@ -51,6 +55,9 @@ class GPPrivPlus(Model):
         self.max_iter = 100 if max_iter is None else max_iter
         self.parallel_update = parallel_update
         self.damping = 0.9
+
+        if ignore_warnings:
+            warnings.simplefilter('ignore', NegativeVarianceWarning)
 
     def parameters_changed(self):
         K = self.kernel.K(self.X)
@@ -222,11 +229,13 @@ def _next_site(cav, cav_star, y):
     nu, tau = _next_site_common(Z, dZdm, d2Zdm2, cav)
     nu_star, tau_star = _next_site_common(Z, dZdm_star, d2Zdm_star2, cav_star)
     if tau < epsilon:
-        warnings.warn("Tau of site distribution %f < 0" % tau)
+        warnings.warn("Tau of site distribution %f < 0" % tau,
+                      NegativeVarianceWarning)
         tau = epsilon
 
     if tau_star < epsilon:
-        warnings.warn("Tau of noise site distribution %f < 0" % tau_star)
+        warnings.warn("Tau of noise site distribution %f < 0" % tau_star,
+                      NegativeVarianceWarning)
         tau_star = epsilon
 
     return nu, tau, nu_star, tau_star, np.log(Z)
