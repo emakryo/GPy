@@ -56,14 +56,15 @@ class GPPrivPlus(Model):
 
         self.max_iter = 100 if max_iter is None else max_iter
         self.parallel_update = parallel_update
-        self.pool = multiprocessing.Pool() if parallel_update else None
         self.show_progress = show_progress
         self.damping = damping
         self.init_damping = init_damping
 
         if ignore_warnings:
             warnings.simplefilter('ignore', NegativeVarianceWarning)
+            print(warnings.filters)
 
+        self.pool = multiprocessing.Pool() if parallel_update else None
 
     def parameters_changed(self):
         K = self.kernel.K(self.X)
