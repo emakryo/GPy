@@ -59,6 +59,8 @@ class GPPrivPlus(Model):
         if ignore_warnings:
             warnings.simplefilter('ignore', NegativeVarianceWarning)
 
+        self.pool = multiprocessing.Pool() if parallel_update else None
+
     def parameters_changed(self):
         K = self.kernel.K(self.X)
         Kstar = self.kernel_star.K(self.Xstar)
@@ -98,8 +100,6 @@ class GPPrivPlus(Model):
         log_Z = np.zeros(n_data)
         converged = False
 
-        pool = multiprocessing.Pool() if self.parallel_update else None
-
         for loop in range(self.max_iter):
             print(loop, "th iteration")
             old_site = site.copy()
@@ -121,7 +121,7 @@ class GPPrivPlus(Model):
             else:
                 args = [(CavParam(i, site, post), CavParam(i, site_star, post_star), Y[i])
                         for i in range(n_data)]
-                nu, tau, nu_star, tau_star, log_Z = zip(*pool.starmap(_next_site, args))
+                nu, tau, nu_star, tau_star, log_Z = zip(*self.pool.starmap(_next_site, args))
                 site.update_parallel(np.array(nu), np.array(tau), damping=self.damping)
                 site_star.update_parallel(np.array(nu_star), np.array(tau_star), damping=self.damping)
 
