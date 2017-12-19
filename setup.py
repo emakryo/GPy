@@ -102,6 +102,10 @@ ext_mods = [Extension(name='GPy.kern.src.stationary_cython',
             Extension(name='GPy.models.state_space_cython',
                       sources=['GPy/models/state_space_cython.c'],
                       include_dirs=[np.get_include(),'.'],
+                      extra_compile_args=compile_flags),
+            Extension(name='GPy.models.gp_priv_plus_inner_calc',
+                      sources=['GPy/models/gp_priv_plus_inner_calc.pyx'],
+                      include_dirs=[np.get_include(),'.'],
                       extra_compile_args=compile_flags)]
 
 setup(name = 'GPy',

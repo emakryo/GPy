@@ -1,3 +1,4 @@
+import sys
 import warnings
 import multiprocessing
 import numpy as np
@@ -8,6 +9,12 @@ from .. import kern
 from ..likelihoods import Bernoulli
 from ..likelihoods.link_functions import Heaviside
 from ..inference.latent_function_inference.posterior import PosteriorEP
+from ..mappings import Constant
+
+from ..models.gp_priv_plus_inner_calc import (_Z_cy, _dZdm_cy, _d2Zdm2_cy,
+                                              _dZdm_star_cy, _d2Zdm_star2_cy)
+
+use_cython = True
 
 epsilon = np.finfo(np.float64).eps
 
@@ -18,7 +25,7 @@ class NegativeVarianceWarning(Warning):
 
 class GPPrivPlus(Model):
     def __init__(self, X, Y, Xstar, kernel=None, kernel_star=None,
-                 mean=None, mean_star=None, max_iter=None,
+                 mean=None, mean_star=None, max_iter=100,
                  damping=0.9, init_damping=0.,
                  parallel_update=True, ignore_warnings=True, show_progress=True):
         super(GPPrivPlus, self).__init__("gp_priv_plus")
@@ -37,8 +44,15 @@ class GPPrivPlus(Model):
         else:
             self.kernel_star = kernel_star
 
-        self.mean = mean
-        self.mean_star = mean_star
+        if np.isscalar(mean):
+            self.mean = Constant(X.shape[1], 1, mean)
+        else:
+            self.mean = mean
+
+        if np.isscalar(mean_star):
+            self.mean_star = Constant(Xstar.shape[1], 1, mean_star)
+        else:
+            self.mean_star = mean_star
 
         self.link_parameter(self.kernel)
         self.link_parameter(self.kernel_star)
@@ -54,7 +68,7 @@ class GPPrivPlus(Model):
         self._log_marginal_likelihood = None
         self.grad_dict = None
 
-        self.max_iter = 100 if max_iter is None else max_iter
+        self.max_iter = max_iter
         self.parallel_update = parallel_update
         self.show_progress = show_progress
         self.damping = damping
@@ -62,9 +76,6 @@ class GPPrivPlus(Model):
 
         if ignore_warnings:
             warnings.simplefilter('ignore', NegativeVarianceWarning)
-            print(warnings.filters)
-
-        self.pool = multiprocessing.Pool() if parallel_update else None
 
     def parameters_changed(self):
         K = self.kernel.K(self.X)
@@ -125,7 +136,9 @@ class GPPrivPlus(Model):
             else:
                 args = [(CavParam(i, site, post), CavParam(i, site_star, post_star), Y[i])
                         for i in range(n_data)]
-                nu, tau, nu_star, tau_star, log_Z = zip(*self.pool.starmap(_next_site, args))
+                with multiprocessing.Pool() as pool:
+                    nu, tau, nu_star, tau_star, log_Z = zip(*pool.starmap(_next_site, args))
+
                 site.update_parallel(np.array(nu), np.array(tau), damping=self.damping)
                 site_star.update_parallel(np.array(nu_star), np.array(tau_star), damping=self.damping)
 
@@ -133,7 +146,15 @@ class GPPrivPlus(Model):
             post_star.full_update(Kstar, mean_star, site_star)
 
             if self.show_progress:
-                print(loop, "th iteration:")
+                print(loop, "th iteration: change",
+                      *["{:.3e}".format(np.max(np.abs(a-b)))
+                        for a, b in zip([site.nu, site.tau, site_star.nu, site_star.tau],
+                                        [old_site.nu, old_site.tau,
+                                         old_site_star.nu, old_site_star.tau])],
+                      file=sys.stderr, flush=True)
+                print("norm", *["{:.3e}".format(np.sqrt(a.dot(a)))
+                                for a in [site.nu, site.tau, site_star.nu, site_star.tau]],
+                      file=sys.stderr, flush=True)
 
             if self._converged(site, site_star, old_site, old_site_star):
                 converged = True
@@ -208,31 +229,61 @@ class GPPrivPlus(Model):
     def save_model(self, output_filename, compress=True, save_data=True):
         ...
 
+
+def _Z_py(g, mean, var, mean_star, var_star, y):
+    return (norm.cdf(y * mean / np.sqrt(var + np.exp(g))) *
+            norm.pdf(g, mean_star, np.sqrt(var_star)))
+
+
+def _dZdm_py(g, mean, var, mean_star, var_star, y):
+    return (y / np.sqrt(var + np.exp(g)) *
+            norm.pdf(y * mean / np.sqrt(var + np.exp(g))) *
+            norm.pdf(g, mean_star, np.sqrt(var_star)))
+
+
+def _d2Zdm2_py(g, mean, var, mean_star, var_star, y):
+    return (-y * mean / np.sqrt(var + np.exp(g)) ** 3 *
+            norm.pdf(y * mean / np.sqrt(var + np.exp(g))) *
+            norm.pdf(g, mean_star, np.sqrt(var_star)))
+
+
+def _dZdm_star_py(g, mean, var, mean_star, var_star, y):
+    return (norm.cdf(y * mean / np.sqrt(var + np.exp(g))) *
+            (g - mean_star) / var_star *
+            norm.pdf(g, mean_star, np.sqrt(var_star)))
+
+
+def _d2Zdm_star2_py(g, mean, var, mean_star, var_star, y):
+    return (norm.cdf(y * mean / np.sqrt(var + np.exp(g))) *
+            ((g - mean_star) ** 2 / var_star - 1) / var_star *
+            norm.pdf(g, mean_star, np.sqrt(var_star)))
+
+if use_cython:
+    _Z = _Z_cy
+    _dZdm = _dZdm_cy
+    _d2Zdm2 = _d2Zdm2_cy
+    _dZdm_star = _dZdm_star_cy
+    _d2Zdm_star2 = _d2Zdm_star2_cy
+else:
+    _Z = _Z_py
+    _dZdm = _dZdm_py
+    _d2Zdm2 = _d2Zdm2_py
+    _dZdm_star = _dZdm_star_py
+    _d2Zdm_star2 = _d2Zdm_star2_py
+
+
 def _next_site(cav, cav_star, y):
-    Z = quad(
-        lambda g: (norm.cdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-        -np.inf, np.inf)[0]
-    dZdm = quad(
-        lambda g: (y / np.sqrt(cav.var + np.exp(g)) *
-                   norm.pdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-        -np.inf, np.inf)[0]
-    d2Zdm2 = quad(
-        lambda g: (-y * cav.mean / np.sqrt(cav.var + np.exp(g)) ** 3 *
-                   norm.pdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-        -np.inf, np.inf)[0]
-    dZdm_star = quad(
-        lambda g: (norm.cdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                   (g - cav_star.mean) / cav_star.var *
-                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-        -np.inf, np.inf)[0]
-    d2Zdm_star2 = quad(
-        lambda g: (norm.cdf(y * cav.mean / np.sqrt(cav.var + np.exp(g))) *
-                   ((g - cav_star.mean) ** 2 / cav_star.var - 1) / cav_star.var *
-                   norm.pdf(g, cav_star.mean, np.sqrt(cav_star.var))),
-        -np.inf, np.inf)[0]
+
+    Z = quad(_Z, -np.inf, np.inf,
+             (cav.mean, cav.var, cav_star.mean, cav_star.var, y))[0]
+    dZdm = quad(_dZdm, -np.inf, np.inf,
+                (cav.mean, cav.var, cav_star.mean, cav_star.var, y))[0]
+    d2Zdm2 = quad(_d2Zdm2, -np.inf, np.inf,
+                  (cav.mean, cav.var, cav_star.mean, cav_star.var, y))[0]
+    dZdm_star = quad(_dZdm_star, -np.inf, np.inf,
+                     (cav.mean, cav.var, cav_star.mean, cav_star.var, y))[0]
+    d2Zdm_star2 = quad(_d2Zdm_star2, -np.inf, np.inf,
+                       (cav.mean, cav.var, cav_star.mean, cav_star.var, y))[0]
     nu, tau = _next_site_common(Z, dZdm, d2Zdm2, cav)
     nu_star, tau_star = _next_site_common(Z, dZdm_star, d2Zdm_star2, cav_star)
     if tau < epsilon:
@@ -259,7 +310,7 @@ def _next_site_common(Z, dZdm, d2Zdm2, cav):
 
 
 class SiteParam:
-    def __init__(self, n, epsilon=1e-6, rtol=1e-5, atol=1e-8):
+    def __init__(self, n, epsilon=1e-3, rtol=1e-5, atol=1e-8):
         self.n = n
         self.nu = np.zeros(n)
         self.tau = np.zeros(n)
@@ -280,10 +331,12 @@ class SiteParam:
         return site
 
     def is_close(self, other):
-        #return (np.allclose(self.nu, other.nu, rtol=self.rtol, atol=self.atol) and
-        #        np.allclose(self.tau, other.tau, rtol=self.rtol, atol=self.atol))
-        return (np.mean((self.nu-other.nu)**2) < self.epsilon and
-                np.mean((self.tau-other.tau)**2) < self.epsilon)
+        # return (np.allclose(self.nu, other.nu, rtol=self.rtol, atol=self.atol) and
+        #         np.allclose(self.tau, other.tau, rtol=self.rtol, atol=self.atol))
+        # return (np.mean((self.nu-other.nu)**2) < self.epsilon and
+        #         np.mean((self.tau-other.tau)**2) < self.epsilon)
+        return max(np.max(np.abs(self.nu-other.nu)),
+                   np.max(np.abs(self.tau-other.tau))) < self.epsilon
 
     def update(self, i, nu, tau, damping=1.0):
         self.nu[i] = damping * nu + (1 - damping) * self.nu[i]
