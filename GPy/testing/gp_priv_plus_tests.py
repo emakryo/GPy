@@ -17,7 +17,7 @@ class TestGPPrivPlus(unittest.TestCase):
         ).reshape(-1, 1)
         y = (np.random.rand(n_all, 1) < norm.cdf(Xstar))
 
-        n_train = 10
+        n_train = 20
         Xtr = X[:n_train]
         Xtr_star = Xstar[:n_train]
         ytr = y[:n_train]
@@ -28,8 +28,9 @@ class TestGPPrivPlus(unittest.TestCase):
         mean_star.C.constrain_fixed()
         m = GPy.models.GPPrivPlus(Xtr, ytr, Xtr_star, mean_star=mean_star)
         print(m)
-        self.assertTrue(m.checkgrad(verbose=True, tolerance=3e-2))
+        self.assertTrue(m.checkgrad(verbose=True, tolerance=1e-2))
 
+        m.damping = 0.5
         m.optimize(messages=True)
         print(m)
         accuracy = np.count_nonzero((m.predict(Xte)[0]-0.5) * yte > 0) / (n_all-n_train)
