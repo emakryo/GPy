@@ -115,6 +115,8 @@ class GPPrivPlus(Model):
         site, site_star, post, post_star = self._init_ep(K, Kstar, mean, mean_star)
         log_Z = np.zeros(n_data)
         converged = False
+        if self.parallel_update:
+            pool = multiprocessing.Pool()
 
         for loop in range(self.max_iter):
             old_site = site.copy()
@@ -136,8 +138,7 @@ class GPPrivPlus(Model):
             else:
                 args = [(CavParam(i, site, post), CavParam(i, site_star, post_star), Y[i])
                         for i in range(n_data)]
-                with multiprocessing.Pool() as pool:
-                    nu, tau, nu_star, tau_star, log_Z = zip(*pool.starmap(_next_site, args))
+                nu, tau, nu_star, tau_star, log_Z = zip(*pool.starmap(_next_site, args))
 
                 site.update_parallel(np.array(nu), np.array(tau), damping=self.damping)
                 site_star.update_parallel(np.array(nu_star), np.array(tau_star), damping=self.damping)
@@ -159,6 +160,9 @@ class GPPrivPlus(Model):
             if self._converged(site, site_star, old_site, old_site_star):
                 converged = True
                 break
+
+        if self.parallel_update:
+            pool.close()
 
         if not converged:
             warnings.warn("Iteration count reached maximum %d" % self.max_iter)
