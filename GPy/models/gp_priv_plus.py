@@ -104,6 +104,9 @@ class GPPrivPlus(Model):
     def log_likelihood(self):
         return self._log_marginal_likelihood
 
+    def predict_noiseless(self, Xnew, full_cov=False):
+        return self.predict(Xnew, full_cov, include_likelihood=False)
+
     def predict(self, Xnew, full_cov=False, include_likelihood=True):
         mu, var = self.posterior._raw_predict(self.kernel, Xnew, pred_var=self.X, full_cov=full_cov)
         if include_likelihood:
@@ -115,8 +118,7 @@ class GPPrivPlus(Model):
         site, site_star, post, post_star = self._init_ep(K, Kstar, mean, mean_star)
         log_Z = np.zeros(n_data)
         converged = False
-        if self.parallel_update:
-            pool = multiprocessing.Pool()
+        pool = multiprocessing.Pool() if self.parallel_update else None
 
         for loop in range(self.max_iter):
             old_site = site.copy()
