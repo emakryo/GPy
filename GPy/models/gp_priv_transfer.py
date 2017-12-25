@@ -44,7 +44,10 @@ class GPPrivTransfer(GP):
         if likelihoods_list is not None:
             assert len(likelihoods_list) == 2, "Invalid likelihoods length %d" % len(likelihoods_list)
         else:
-            likelihoods_list = [likelihoods.Bernoulli(), likelihoods.GaussianPV()]
+            bernoulli = likelihoods.Bernoulli()
+            gaussian = likelihoods.Gaussian()
+            gaussian.variance.constrain_bounded(0.01, 100)
+            likelihoods_list = [bernoulli, gaussian]
 
         likelihood = util.multioutput.build_likelihood([Y, S], self.output_index, likelihoods_list)
 

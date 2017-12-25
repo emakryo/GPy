@@ -401,6 +401,10 @@ class EP(EPBase, ExactGaussianInference):
 
 
 class EPConditional(EP):
+    def __init__(self, *arg_list, **arg_dict):
+        super(EP, self).__init__(*arg_list, **arg_dict)
+        self._exact_gaussian = ExactGaussianInference()
+
     def _inference(self, Y, mean_prior, K, ga_approx, cav_params, likelihood, Z_tilde, Y_metadata=None):
         full_posterior, full_log_marginal, full_grad_dict = super(EPConditional, self)._inference(
             Y, mean_prior, K, ga_approx, cav_params, likelihood, Z_tilde, Y_metadata
@@ -408,7 +412,7 @@ class EPConditional(EP):
         cond_idx = Y_metadata['conditional_index'].flatten()
 
         cond_Y_metadata = {k: v[cond_idx] for k, v in Y_metadata.items()}
-        cond_posterior, cond_log_marginal, cond_grad_dict = ExactGaussianInference().inference(
+        cond_posterior, cond_log_marginal, cond_grad_dict = self._exact_gaussian.inference(
             None, None, likelihood, Y[cond_idx], Y_metadata=cond_Y_metadata,
             K=K[np.ix_(cond_idx, cond_idx)]
         )
