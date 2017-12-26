@@ -29,18 +29,22 @@ class GPPrivTransfer(GP):
     :param kernel_name: name of the kernel
     :type kernel_name: string
     """
-    def __init__(self, X, Y, S, V, posterior=True, kernel=None, likelihoods_list=None,
+    def __init__(self, X, Y, S, V, posterior=True, kernel=None, gauss_likelihood='post',
                  priv_kernel=None, name='gp_priv_transfer', max_iters=np.inf):
 
         # If posterior is False, S is assumed to be privileged information and V is ignored
         if not posterior:
             if priv_kernel is None:
                 priv_kernel = kern.RBF(S.shape[1])
-                priv_kernel.constrain_fixed()
+                priv_kernel.variance.constrain_fixed()
 
             m_class = GPClassification(S, Y, kernel=priv_kernel)
+            m_class.optimize()
 
             S, V = m_class.predict_noiseless(X)
+            self.m_class = m_class
+        else:
+            self.m_class = None
 
         # Input and Output
         Xall, Yall, self.output_index = util.multioutput.build_XY([X, X], [Y, S])
@@ -55,14 +59,16 @@ class GPPrivTransfer(GP):
         kernel = kernel.prod(kern.DualTask(input_dim=1, active_dims=[dim]), name='k')
 
         # Likelihood
-        if likelihoods_list is not None:
-            assert len(likelihoods_list) == 2, "Invalid likelihoods length %d" % len(likelihoods_list)
-        else:
-            bernoulli = likelihoods.Bernoulli()
-            # gaussian = likelihoods.Gaussian()
-            # gaussian.variance.constrain_bounded(0.01, 100)
+        bernoulli = likelihoods.Bernoulli()
+        if gauss_likelihood == 'post':
             gaussian = FixedHeteroscedasticGaussian(V.flatten())
-            likelihoods_list = [bernoulli, gaussian]
+        elif np.isscalar(gauss_likelihood):
+            gaussian = likelihoods.Gaussian()
+            gaussian.variance.constrain_fixed(gauss_likelihood)
+        else:
+            gaussian = likelihoods.Gaussian()
+
+        likelihoods_list = [bernoulli, gaussian]
 
         self.likelihood_list = likelihoods_list
         likelihood = util.multioutput.build_likelihood([Y, S], self.output_index, likelihoods_list)

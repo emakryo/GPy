@@ -38,7 +38,6 @@ from __future__ import print_function
 import os
 import sys
 from setuptools import setup, Extension
-from Cython.Build import cythonize
 import numpy as np
 import codecs
 
@@ -119,7 +118,7 @@ setup(name = 'GPy',
       keywords = "machine-learning gaussian-processes kernels",
       url = "http://sheffieldml.github.com/GPy/",
       download_url='https://github.com/SheffieldML/GPy/',
-      ext_modules = cythonize(ext_mods),
+      ext_modules = ext_mods,
       packages = ["GPy",
                   "GPy.core",
                   "GPy.core.parameterization",
