@@ -37,7 +37,7 @@ class TestPrivTransferModels(unittest.TestCase):
         assert m.checkgrad(verbose=True)
         # assert m.log_likelihood() < 0
 
-        f_pr, v_pt = m.predict_noiseless(x_te)
+        f_pr, v_pt = m.predict(x_te)
 
         print(np.count_nonzero(f_pr * y_te > 0) / n_te)
 

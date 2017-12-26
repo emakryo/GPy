@@ -129,6 +129,8 @@ class MixedNoise(Likelihood):
         ret = np.zeros_like(args[0])
         for i, lik in enumerate(self.likelihoods_list):
             index = output_index == i
+            if not np.any(index):
+                continue
             args_i = [arg[index] if isinstance(arg, np.ndarray) else arg for arg in args]
             Y_metadata_i = {k: v[index] for k, v in Y_metadata.items()}
             ret[index] = lik.__getattribute__(func_name)(*args_i, Y_metadata=Y_metadata_i)

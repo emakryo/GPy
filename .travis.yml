@@ -39,6 +39,7 @@ install:
 - pip install git+git://github.com/BRML/climin.git
 - pip install autograd
 - pip install nose-show-skipped
+- pip install Cython
 - python setup.py develop
 
 script:
