@@ -50,7 +50,8 @@ class TestPrivTransferModels(unittest.TestCase):
         m1.inference_method = GPy.inference.latent_function_inference.EP(ep_mode='nested')
         m1.parameters_changed()
         m2 = GPy.core.GP(x, f, kernel=m0.base_kernel.copy(),
-                         likelihood=m0.likelihood_list[1].copy())
+                         likelihood=m0.likelihood_list[1].copy(),
+                         Y_metadata={'data_index':np.arange(n)[:, None]})
 
         print(m0)
         print(m1)

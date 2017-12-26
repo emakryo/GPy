@@ -22,14 +22,16 @@ class MixedNoise(Likelihood):
         self.log_concave = False
         self.not_block_really = False
 
-    def gaussian_variance(self, Y_metadata):
+    def gaussian_variance(self, Y_metadata=None):
         ind = Y_metadata['output_index'].flatten()
         assert all([isinstance(self.likelihoods_list[i], Gaussian) for i in np.unique(ind)])
         variance = np.zeros(ind.size)
         for j, lik in enumerate(self.likelihoods_list):
             if j not in np.unique(ind):
                 continue
-            variance[ind==j] = lik.variance
+            variance[ind==j] = lik.gaussian_variance(
+                Y_metadata={k: v[ind==j] for k, v in Y_metadata.items()}
+            )
         return variance
 
     def betaY(self,Y,Y_metadata):

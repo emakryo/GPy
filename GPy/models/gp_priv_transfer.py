@@ -51,9 +51,12 @@ class GPPrivTransfer(GP):
 
         self.S = S
         self.V = V
+
+        n_data = X.shape[0]
+        dim = X.shape[1]
+
         # Input and Output
         Xall, Yall, self.output_index = util.multioutput.build_XY([X, X], [Y, S])
-        dim = X.shape[1]
 
         # Kernel
         if kernel is None:
@@ -84,7 +87,7 @@ class GPPrivTransfer(GP):
 
         # Miscellaneous
         Y_metadata = {'output_index': self.output_index,
-                      'variance': np.r_[np.ones_like(V), V],
+                      'data_index': np.tile(np.arange(n_data)[:, None], (2, 1)),
                       'conditional_index': self.output_index != 0}
 
         super(GPPrivTransfer, self).__init__(Xall, Yall, kernel, likelihood, name=name,
@@ -105,10 +108,19 @@ class GPPrivTransfer(GP):
 
 
 class FixedHeteroscedasticGaussian(likelihoods.Gaussian):
-    def __init__(self, variance):
+    def __init__(self, variances):
         gp_link = Identity()
         super(likelihoods.Gaussian, self).__init__(gp_link, 'fhet_Gauss')
-        self.variance = variance
+        self.variances = variances
+
+    def moments_match_ep(self, data_i, tau_i, v_i, Y_metadata_i=None):
+        self.variance = self.variances[int(Y_metadata_i['data_index'])]
+        ret = super(FixedHeteroscedasticGaussian, self).moments_match_ep(data_i, tau_i, v_i)
+        del self.variance
+        return ret
+
+    def gaussian_variance(self, Y_metadata=None):
+        return self.variances[Y_metadata['data_index'].flatten()]
 
     def update_gradients(self, grads):
         ...
