@@ -123,4 +123,4 @@ class FixedHeteroscedasticGaussian(likelihoods.Gaussian):
         return self.variances[Y_metadata['data_index'].flatten()]
 
     def update_gradients(self, grads):
-        ...
+        pass
