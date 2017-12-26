@@ -116,7 +116,7 @@ class MixedNoise(Likelihood):
         else:
             raise ValueError("Index is not specified")
 
-        return self.likelihoods_list[output_index].moments_match_ep(Y_i, tau_i, v_i)
+        return self.likelihoods_list[output_index].moments_match_ep(Y_i, tau_i, v_i, Y_metadata_i)
 
     def _each_likelihood(self, func_name, args, Y_metadata):
         output_index = Y_metadata['output_index'].flatten()

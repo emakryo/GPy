@@ -81,17 +81,23 @@ class Gaussian(Likelihood):
         """
         Moments match of the marginal approximation in EP algorithm
 
-        :param i: number of observation (int)
+        :param data_i: number of observation (int)
         :param tau_i: precision of the cavity distribution (float)
         :param v_i: mean/variance of the cavity distribution (float)
         """
 
-        if self.variance < 1e-4:
-            warnings.warn("variance is too small: %f" % self.variance)
+        if Y_metadata_i is not None and 'variance' in Y_metadata_i:
+            variance = Y_metadata_i['variance']
+        else:
+            variance = self.variance
 
-        sigma2_hat = 1./(1./self.variance + tau_i)
-        mu_hat = sigma2_hat*(data_i/self.variance + v_i)
-        sum_var = self.variance + 1./tau_i
+        if variance < 1e-4:
+            # EP may be unstable when variance is small
+            warnings.warn("variance is too small: %f" % variance)
+
+        sigma2_hat = 1./(1./variance + tau_i)
+        mu_hat = sigma2_hat*(data_i/variance + v_i)
+        sum_var = variance + 1./tau_i
         Z_hat = 1./np.sqrt(2.*np.pi*sum_var)*np.exp(-.5*(data_i - v_i/tau_i)**2./sum_var)
         return Z_hat, mu_hat, sigma2_hat
 

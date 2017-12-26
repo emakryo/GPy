@@ -31,7 +31,7 @@ class TestGPPrivPlus(unittest.TestCase):
         self.assertTrue(m.checkgrad(verbose=True, tolerance=1e-2))
 
         m.damping = 0.5
-        m.optimize(messages=True)
+        m.optimize()
         print(m)
         accuracy = np.count_nonzero((m.predict(Xte)[0]-0.5) * yte > 0) / (n_all-n_train)
         print(accuracy)

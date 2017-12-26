@@ -27,7 +27,7 @@ class GPPrivPlus(Model):
     def __init__(self, X, Y, Xstar, kernel=None, kernel_star=None,
                  mean=None, mean_star=None, max_iter=100,
                  damping=0.9, init_damping=0.,
-                 parallel_update=True, ignore_warnings=True, show_progress=True):
+                 parallel_update=True, ignore_warnings=True, show_progress=False):
         super(GPPrivPlus, self).__init__("gp_priv_plus")
 
         self.X = X

@@ -1,7 +1,9 @@
 import numpy as np
+from . import GPClassification
 from ..inference.latent_function_inference import EP, EPConditional
 from ..core import GP
 from .. import likelihoods
+from ..likelihoods.link_functions import Identity
 from .. import kern
 from .. import util
 
@@ -27,8 +29,18 @@ class GPPrivTransfer(GP):
     :param kernel_name: name of the kernel
     :type kernel_name: string
     """
-    def __init__(self, X, Y, S, kernel=None, likelihoods_list=None,
-                 name='gp_priv_transfer', kernel_name='dual_task', max_iters=np.inf):
+    def __init__(self, X, Y, S, V, posterior=True, kernel=None, likelihoods_list=None,
+                 priv_kernel=None, name='gp_priv_transfer', max_iters=np.inf):
+
+        # If posterior is False, S is assumed to be privileged information and V is ignored
+        if not posterior:
+            if priv_kernel is None:
+                priv_kernel = kern.RBF(S.shape[1])
+                priv_kernel.constrain_fixed()
+
+            m_class = GPClassification(S, Y, kernel=priv_kernel)
+
+            S, V = m_class.predict_noiseless(X)
 
         # Input and Output
         Xall, Yall, self.output_index = util.multioutput.build_XY([X, X], [Y, S])
@@ -37,18 +49,22 @@ class GPPrivTransfer(GP):
         # Kernel
         if kernel is None:
             kernel = kern.RBF(dim)
+            kernel.variance.constrain_fixed()
 
-        kernel = kernel.prod(kern.DualTask(input_dim=1, active_dims=[dim]), name=kernel_name)
+        self.base_kernel = kernel
+        kernel = kernel.prod(kern.DualTask(input_dim=1, active_dims=[dim]), name='k')
 
         # Likelihood
         if likelihoods_list is not None:
             assert len(likelihoods_list) == 2, "Invalid likelihoods length %d" % len(likelihoods_list)
         else:
             bernoulli = likelihoods.Bernoulli()
-            gaussian = likelihoods.Gaussian()
-            gaussian.variance.constrain_bounded(0.01, 100)
+            # gaussian = likelihoods.Gaussian()
+            # gaussian.variance.constrain_bounded(0.01, 100)
+            gaussian = FixedHeteroscedasticGaussian(V.flatten())
             likelihoods_list = [bernoulli, gaussian]
 
+        self.likelihood_list = likelihoods_list
         likelihood = util.multioutput.build_likelihood([Y, S], self.output_index, likelihoods_list)
 
         # Inference
@@ -57,6 +73,7 @@ class GPPrivTransfer(GP):
 
         # Miscellaneous
         Y_metadata = {'output_index': self.output_index,
+                      'variance': np.r_[np.ones_like(V), V],
                       'conditional_index': self.output_index != 0}
 
         super(GPPrivTransfer, self).__init__(Xall, Yall, kernel, likelihood, name=name,
@@ -74,3 +91,13 @@ class GPPrivTransfer(GP):
     def posterior_samples_f(self, X, size=10, full_cov=True, **predict_kwargs):
         X, _, _ = util.multioutput.build_XY([X])
         return super(GPPrivTransfer, self).posterior_samples_f(X, size=size, full_cov=full_cov, **predict_kwargs)
+
+
+class FixedHeteroscedasticGaussian(likelihoods.Gaussian):
+    def __init__(self, variance):
+        gp_link = Identity()
+        super(likelihoods.Gaussian, self).__init__(gp_link, 'fhet_Gauss')
+        self.variance = variance
+
+    def update_gradients(self, grads):
+        ...
