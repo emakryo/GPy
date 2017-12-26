@@ -34,14 +34,16 @@ class GPPrivTransfer(GP):
 
         # If posterior is False, S is assumed to be privileged information and V is ignored
         if not posterior:
+            XS = S
             if priv_kernel is None:
-                priv_kernel = kern.RBF(S.shape[1])
+                priv_kernel = kern.RBF(XS.shape[1])
                 priv_kernel.variance.constrain_fixed()
 
-            m_class = GPClassification(S, Y, kernel=priv_kernel)
+            m_class = GPClassification(XS, Y, kernel=priv_kernel)
             m_class.optimize()
 
-            S, V = m_class.predict_noiseless(X)
+            S, V = m_class.predict_noiseless(XS)
+            self.XS = XS
             self.m_class = m_class
         else:
             self.m_class = None
