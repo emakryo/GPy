@@ -29,7 +29,7 @@ class GPPrivTransfer(GP):
     :param kernel_name: name of the kernel
     :type kernel_name: string
     """
-    def __init__(self, X, Y, S, V, posterior=True, kernel=None, gauss_likelihood='post',
+    def __init__(self, X, Y, S, V=None, posterior=True, kernel=None, gauss_likelihood='post',
                  priv_kernel=None, name='gp_priv_transfer', max_iters=np.inf):
 
         # If posterior is False, S is assumed to be privileged information and V is ignored
@@ -46,6 +46,9 @@ class GPPrivTransfer(GP):
         else:
             self.m_class = None
 
+
+        self.S = S
+        self.V = V
         # Input and Output
         Xall, Yall, self.output_index = util.multioutput.build_XY([X, X], [Y, S])
         dim = X.shape[1]
