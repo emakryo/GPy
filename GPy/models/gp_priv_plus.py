@@ -20,7 +20,7 @@ epsilon = np.finfo(np.float64).eps
 
 
 class NegativeVarianceWarning(Warning):
-    ...
+    pass
 
 
 class GPPrivPlus(Model):
