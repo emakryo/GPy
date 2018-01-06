@@ -113,8 +113,10 @@ class GPPrivPlus(Model):
             mu, var = Bernoulli(Heaviside()).predictive_values(mu, var, full_cov=full_cov)
         return mu, var
 
-    def _ep(self, K, Kstar, Y, mean, mean_star):
+    def _ep(self, K, Kstar, Y, mean, mean_star, diag_bias=1e-5):
         n_data = Y.shape[0]
+        K += diag_bias * np.eye(n_data)
+        Kstar += diag_bias * np.eye(n_data)
         site, site_star, post, post_star = self._init_ep(K, Kstar, mean, mean_star)
         log_Z = np.zeros(n_data)
         converged = False
@@ -141,6 +143,11 @@ class GPPrivPlus(Model):
                 args = [(CavParam(i, site, post), CavParam(i, site_star, post_star), Y[i])
                         for i in range(n_data)]
                 nu, tau, nu_star, tau_star, log_Z = zip(*pool.starmap(_next_site, args))
+                # _next_sites = []
+                # for i, arg in enumerate(args):
+                #     _next_sites.append(_next_site(*arg))
+
+                # nu, tau, nu_star, tau_star, log_Z = zip(*_next_sites)
 
                 site.update_parallel(np.array(nu), np.array(tau), damping=self.damping)
                 site_star.update_parallel(np.array(nu_star), np.array(tau_star), damping=self.damping)
@@ -398,3 +405,6 @@ class CavParam:
     def __init__(self, i, site, post):
         self.var = 1/(1/post.cov[i][i] - site.tau[i])
         self.mean = self.var * (post.mean[i]/post.cov[i][i] - site.nu[i])
+
+    def __repr__(self):
+        return "CavParam(mean = {}, var = {})".format(self.mean, self.var)

@@ -22,18 +22,21 @@ class GPPrivTransfer(GP):
     :tye S: numpy arrays
     :param kernel: a GPy kernel, defaults to RBF
     :type kernel: None | GPy.kernel defaults
+    :param softlabel: whether S is soft labels or not
+    :type softlabel: bool
+    :param gauss_likelihood: variance of gaussian likelihood,
+        if None optimized, if positive fixed to the value, if negative, heteroscedastic likelihood,
+    :type gauss_likelihood: float | None | GPy.likelihoods.Likelihood
     :likelihoods_list: a list of likelihoods, defaults to a pair of Bernoulli & Gaussian likelihoods
     :type likelihoods_list None | a list GPy.likelihoods
     :param name: model name
     :type name: string
-    :param kernel_name: name of the kernel
-    :type kernel_name: string
     """
-    def __init__(self, X, Y, S, V=None, posterior=True, kernel=None, gauss_likelihood='post',
+    def __init__(self, X, Y, S, V=None, softlabel=True, kernel=None, gauss_likelihood=1.,
                  priv_kernel=None, name='gp_priv_transfer', max_iters=np.inf):
 
-        # If posterior is False, S is assumed to be privileged information and V is ignored
-        if not posterior:
+        # If softlabel is False, S is assumed to be privileged information and V is ignored
+        if not softlabel:
             XS = S
             if priv_kernel is None:
                 priv_kernel = kern.RBF(XS.shape[1])
@@ -46,6 +49,7 @@ class GPPrivTransfer(GP):
             self.XS = XS
             self.m_class = m_class
         else:
+            self.XS = S
             self.m_class = None
 
 
@@ -68,11 +72,14 @@ class GPPrivTransfer(GP):
 
         # Likelihood
         bernoulli = likelihoods.Bernoulli()
-        if gauss_likelihood == 'post':
-            gaussian = FixedHeteroscedasticGaussian(V.flatten())
-        elif np.isscalar(gauss_likelihood):
-            gaussian = likelihoods.Gaussian()
-            gaussian.variance.constrain_fixed(gauss_likelihood)
+        if np.isscalar(gauss_likelihood):
+            if gauss_likelihood < 0:
+                gaussian = FixedHeteroscedasticGaussian(V.flatten())
+            else:
+                gaussian = likelihoods.Gaussian()
+                gaussian.variance.constrain_fixed(gauss_likelihood)
+        elif isinstance(gauss_likelihood, likelihoods.Likelihood):
+            gaussian = gauss_likelihood
         else:
             gaussian = likelihoods.Gaussian()
 
