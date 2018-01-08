@@ -33,14 +33,13 @@ class GPPrivTransfer(GP):
     :type name: string
     """
     def __init__(self, X, Y, S, V=None, softlabel=True, kernel=None, gauss_likelihood=1.,
-                 priv_kernel=None, name='gp_priv_transfer', max_iters=np.inf):
+                 priv_kernel=None, name='gp_priv_transfer', max_iters=200):
 
         # If softlabel is False, S is assumed to be privileged information and V is ignored
         if not softlabel:
             XS = S
             if priv_kernel is None:
                 priv_kernel = kern.RBF(XS.shape[1])
-                priv_kernel.variance.constrain_fixed()
 
             m_class = GPClassification(XS, Y, kernel=priv_kernel)
             m_class.optimize()
