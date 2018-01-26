@@ -28,7 +28,7 @@ class GP(Model):
     :param Norm normalizer:
         normalize the outputs Y.
         Prediction will be un-normalized using this normalizer.
-        If normalizer is None, we will normalize using Standardize.
+        If normalizer is True, we will normalize using Standardize.
         If normalizer is False, no normalization will be done.
 
     .. Note:: Multiple independent outputs are allowed using columns of Y
@@ -678,3 +678,12 @@ class GP(Model):
         """
         mu_star, var_star = self._raw_predict(x_test)
         return self.likelihood.log_predictive_density_sampling(y_test, mu_star, var_star, Y_metadata=Y_metadata, num_samples=num_samples)
+
+    def posterior_covariance_between_points(self, X1, X2):
+        """
+        Computes the posterior covariance between points.
+
+        :param X1: some input observations
+        :param X2: other input observations
+        """
+        return self.posterior.covariance_between_points(self.kern, self.X, X1, X2)
