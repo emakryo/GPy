@@ -38,5 +38,5 @@ class TestGPPrivPlus(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    #unittest.main()
-    TestGPPrivPlus().test_rbf()
+    unittest.main()
+    #TestGPPrivPlus().test_rbf()

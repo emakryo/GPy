@@ -142,7 +142,7 @@ class GPPrivPlus(Model):
             else:
                 args = [(CavParam(i, site, post), CavParam(i, site_star, post_star), Y[i])
                         for i in range(n_data)]
-                nu, tau, nu_star, tau_star, log_Z = zip(*pool.starmap(_next_site, args))
+                nu, tau, nu_star, tau_star, log_Z = zip(*pool.map(_next_site_pool, args))
                 # _next_sites = []
                 # for i, arg in enumerate(args):
                 #     _next_sites.append(_next_site(*arg))
@@ -155,16 +155,16 @@ class GPPrivPlus(Model):
             post.full_update(K, mean, site)
             post_star.full_update(Kstar, mean_star, site_star)
 
-            if self.show_progress:
-                print(loop, "th iteration: change",
-                      *["{:.3e}".format(np.max(np.abs(a-b)))
-                        for a, b in zip([site.nu, site.tau, site_star.nu, site_star.tau],
-                                        [old_site.nu, old_site.tau,
-                                         old_site_star.nu, old_site_star.tau])],
-                      file=sys.stderr, flush=True)
-                print("norm", *["{:.3e}".format(np.sqrt(a.dot(a)))
-                                for a in [site.nu, site.tau, site_star.nu, site_star.tau]],
-                      file=sys.stderr, flush=True)
+            # if self.show_progress:
+            #     print(loop, "th iteration: change",
+            #           *["{:.3e}".format(np.max(np.abs(a-b)))
+            #             for a, b in zip([site.nu, site.tau, site_star.nu, site_star.tau],
+            #                             [old_site.nu, old_site.tau,
+            #                              old_site_star.nu, old_site_star.tau])],
+            #           file=sys.stderr, flush=True)
+            #     print("norm", *["{:.3e}".format(np.sqrt(a.dot(a)))
+            #                     for a in [site.nu, site.tau, site_star.nu, site_star.tau]],
+            #           file=sys.stderr, flush=True)
 
             if self._converged(site, site_star, old_site, old_site_star):
                 converged = True
@@ -239,8 +239,8 @@ class GPPrivPlus(Model):
     def to_dict(self):
         return self._to_dict()
 
-    def save_model(self, output_filename, compress=True, save_data=True):
-        ...
+    # def save_model(self, output_filename, compress=True, save_data=True):
+    #     ...
 
 
 def _Z_py(g, mean, var, mean_star, var_star, y):
@@ -284,6 +284,9 @@ else:
     _dZdm_star = _dZdm_star_py
     _d2Zdm_star2 = _d2Zdm_star2_py
 
+
+def _next_site_pool(args):
+    return _next_site(args[0], args[1], args[2])
 
 def _next_site(cav, cav_star, y):
 
