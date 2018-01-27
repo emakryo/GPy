@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import GPy
 
-def illustrate_1d(n_samples=50, random_state=1):
+def illustrate_1d(n_samples=25, random_state=1):
     if isinstance(random_state, np.random.RandomState):
         generator = random_state
     else:
@@ -17,15 +17,23 @@ def illustrate_1d(n_samples=50, random_state=1):
     Xgrid = np.zeros((n_grid, 2))
     Xgrid[:, 0] = np.linspace(0, 10)
 
-    m = GPy.models.GPDistillation(X, Y, S)
-    fm, fv = m.predict_noiseless(Xgrid)
+    m_priv = GPy.models.GPPrivTransfer(X, Y, S, softlabel=False)
+    m_priv.optimize()
+    fm_priv, fv_priv = m_priv.predict_noiseless(Xgrid)
 
-    print(m)
-    print(m.likelihood)
+    print(m_priv)
+
+    m_clas = GPy.models.GPClassification(X, Y)
+    m_clas.optimize()
+    fm_clas, fv_clas = m_clas.predict_noiseless(Xgrid)
+    print(m_clas)
+
     plt.plot(X, S, 'o')
-    plt.plot([0, 10], [0, 0])
-    plt.plot(Xgrid[:, 0], fm)
+    plt.plot([0, 10], [0, 0], "k-")
+    plt.plot(Xgrid[:, 0], fm_priv, label="SLT")
+    plt.plot(Xgrid[:, 0], fm_clas, label="non-SLT")
     plt.xlim((1, 10))
+    plt.legend()
     plt.show()
 
 if __name__ == "__main__":
