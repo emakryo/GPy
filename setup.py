@@ -38,6 +38,7 @@ from __future__ import print_function
 import os
 import sys
 from setuptools import setup, Extension
+from Cython.Distutils import build_ext
 import numpy as np
 import codecs
 
@@ -105,7 +106,7 @@ ext_mods = [Extension(name='GPy.kern.src.stationary_cython',
                       sources=['GPy/models/state_space_cython.c'],
                       include_dirs=[np.get_include(),'.'],
                       extra_compile_args=compile_flags,
-                      extra_link_args = link_args)]
+                      extra_link_args = link_args),
             Extension(name='GPy.models.gp_priv_plus_inner_calc',
                       sources=['GPy/models/gp_priv_plus_inner_calc.pyx'],
                       include_dirs=[np.get_include(),'.'],
@@ -115,6 +116,7 @@ setup(name = 'GPy',
       version = __version__,
       author = read_to_rst('AUTHORS.txt'),
       author_email = "gpy.authors@gmail.com",
+      cmdclass = {'build_ext': build_ext},
       description = ("The Gaussian Process Toolbox"),
       long_description = desc,
       license = "BSD 3-clause",
