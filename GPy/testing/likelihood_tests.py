@@ -128,12 +128,23 @@ class TestNoiseModels(unittest.TestCase):
         censored[random_inds] = 1
         self.Y_metadata = dict()
         self.Y_metadata['censored'] = censored
+        self.Y_metadata['output_index'] = np.zeros((self.N,1), dtype=int)
+        self.Y_metadata2 = dict()
+        self.Y_metadata2['censored'] = censored
+        inds = np.zeros((self.N,1), dtype=int)
+        inds[5:10] = 1
+        inds[10:] = 2
+        self.Y_metadata2['output_index'] = inds
+        self.combY = self.Y
+        self.combY[10:] = np.where(self.binary_Y[10:] >0, self.binary_Y[10:], 0)
+        print(self.combY)
 
         self.N_binary = 10
         self.mixed_Y = np.concatenate([np.random.randint(0, 2, self.N_binary).reshape(-1, 1),
                                        np.random.randn(self.N-self.N_binary, 1)], axis=0)
-        self.Y_metadata['output_index'] = np.concatenate([np.zeros((self.N_binary, 1), int),
-                                                          np.ones((self.N-self.N_binary, 1),int)], axis=0)
+        self.Y_metadata3 = dict()
+        self.Y_metadata3['output_index'] = np.concatenate([np.zeros((self.N_binary, 1), int),
+                                                           np.ones((self.N-self.N_binary, 1),int)], axis=0)
 
         #Make a bigger step as lower bound can be quite curved
         self.step = 1e-4
@@ -300,6 +311,15 @@ class TestNoiseModels(unittest.TestCase):
                 "Y_metadata": self.Y_metadata,
                 "laplace": True
             },
+            "multioutput_default": {
+                "model": GPy.likelihoods.MultioutputLikelihood([GPy.likelihoods.Gaussian(), GPy.likelihoods.Poisson(), GPy.likelihoods.Bernoulli()]),
+                "link_f_constraints": [partial(self.constrain_bounded, lower=0, upper=1)],
+                "laplace": True,
+                "Y": self.combY,
+                "Y_metadata": self.Y_metadata2,
+                "ep": True,
+                "variational_expectations": True,
+            },
             "mixed_noise_default": {
                 "model": GPy.likelihoods.MixedNoise([
                     GPy.likelihoods.Gaussian(name="gaussian1"),
@@ -311,7 +331,7 @@ class TestNoiseModels(unittest.TestCase):
                     "constraints": [(".*gaussian1.variance", self.constrain_positive),
                                     (".*gaussian2.variance", self.constrain_fixed)]
                 },
-                "Y_metadata": self.Y_metadata,
+                "Y_metadata": self.Y_metadata3,
                 "laplace": True,
                 "ep": True
             },
@@ -327,7 +347,7 @@ class TestNoiseModels(unittest.TestCase):
                 },
                 "link_f_constraints": [partial(self.constrain_bounded, lower=0, upper=1)],
                 "Y": self.mixed_Y,
-                "Y_metadata": self.Y_metadata,
+                "Y_metadata": self.Y_metadata3,
                 "laplace": True,
                 "ep": True
             }
@@ -654,7 +674,7 @@ class TestNoiseModels(unittest.TestCase):
         # Y = Y/Y.max()
         white_var = 1e-4
         kernel = GPy.kern.RBF(X.shape[1]) + GPy.kern.White(X.shape[1])
-        ep_inf = GPy.inference.latent_function_inference.EP(ep_mode="nested")
+        ep_inf = GPy.inference.latent_function_inference.EP(ep_mode="nested", always_reset=True)
 
         m = GPy.core.GP(X.copy(), Y.copy(), kernel=kernel, likelihood=model, Y_metadata=Y_metadata, inference_method=ep_inf)
         m['.*white'].constrain_fixed(white_var)

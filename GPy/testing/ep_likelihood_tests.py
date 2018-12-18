@@ -13,7 +13,7 @@ from nose.tools import with_setup, nottest
 class TestObservationModels(unittest.TestCase):
     def setUp(self):
         np.random.seed(fixed_seed)
-        self.N = 10
+        self.N = 100
         self.D = 2
         self.X = np.random.rand(self.N, self.D)
 
@@ -28,7 +28,7 @@ class TestObservationModels(unittest.TestCase):
 
         self.Y_noisy = self.Y.copy()
         self.Y_verynoisy = self.Y.copy()
-        # self.Y_noisy[75] += 1.3
+        self.Y_noisy[75] += 1.3
 
         self.init_var = 0.15
         self.deg_free = 4.
