@@ -441,34 +441,34 @@ class TestNoiseModels(unittest.TestCase):
 
             #Required by all
             #Normal derivatives
-            self.t_logpdf(model, Y, f, Y_metadata)
-            self.t_dlogpdf_df(model, Y, f, Y_metadata)
-            self.t_d2logpdf_df2(model, Y, f, Y_metadata)
-            # #Link derivatives
-            self.t_dlogpdf_dlink(model, Y, f, Y_metadata, link_f_constraints)
-            self.t_d2logpdf_dlink2(model, Y, f, Y_metadata, link_f_constraints)
+            yield self.t_logpdf, model, Y, f, Y_metadata
+            yield self.t_dlogpdf_df, model, Y, f, Y_metadata
+            yield self.t_d2logpdf_df2, model, Y, f, Y_metadata
+            #Link derivatives
+            yield self.t_dlogpdf_dlink, model, Y, f, Y_metadata, link_f_constraints
+            yield self.t_d2logpdf_dlink2, model, Y, f, Y_metadata, link_f_constraints
             if laplace:
                 #Laplace only derivatives
-                self.t_d3logpdf_df3(model, Y, f, Y_metadata)
-                self.t_d3logpdf_dlink3(model, Y, f, Y_metadata, link_f_constraints)
+                yield self.t_d3logpdf_df3, model, Y, f, Y_metadata
+                yield self.t_d3logpdf_dlink3, model, Y, f, Y_metadata, link_f_constraints
                 #Params
-                self.t_dlogpdf_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
-                self.t_dlogpdf_df_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
-                self.t_d2logpdf2_df2_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
+                yield self.t_dlogpdf_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
+                yield self.t_dlogpdf_df_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
+                yield self.t_d2logpdf2_df2_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
                 #Link params
-                self.t_dlogpdf_link_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
-                self.t_dlogpdf_dlink_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
-                self.t_d2logpdf2_dlink2_dparams(model, Y, f, Y_metadata, param_vals, param_names, param_constraints)
+                yield self.t_dlogpdf_link_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
+                yield self.t_dlogpdf_dlink_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
+                yield self.t_d2logpdf2_dlink2_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
                 #laplace likelihood gradcheck
-                self.t_laplace_fit_rbf_white(model, self.X, Y, f, Y_metadata, self.step, param_vals, param_names, param_constraints)
+                yield self.t_laplace_fit_rbf_white, model, self.X, Y, f, Y_metadata, self.step, param_vals, param_names, param_constraints
             if ep:
                 #ep likelihood gradcheck
-                self.t_ep_fit_rbf_white(model, self.X, Y, f, Y_metadata, self.step, param_vals, param_names, param_constraints)
+                yield self.t_ep_fit_rbf_white, model, self.X, Y, f, Y_metadata, self.step, param_vals, param_names, param_constraints
             if var_exp:
                 #Need to specify mu and var!
-                self.t_varexp(model, Y, Y_metadata)
-                self.t_dexp_dmu(model, Y, Y_metadata)
-                self.t_dexp_dvar(model, Y, Y_metadata)
+                yield self.t_varexp, model, Y, Y_metadata
+                yield self.t_dexp_dmu, model, Y, Y_metadata
+                yield self.t_dexp_dvar, model, Y, Y_metadata
 
 
         self.tearDown()
@@ -481,9 +481,10 @@ class TestNoiseModels(unittest.TestCase):
         print("\n{}".format(inspect.stack()[0][3]))
         print(model)
         #print model._get_params()
-        pdf = model.pdf(f.copy(), Y.copy(), Y_metadata=Y_metadata)
-        logpdf = model.logpdf(f.copy(), Y.copy(), Y_metadata=Y_metadata)
-        assert np.allclose(np.log(pdf), logpdf)
+        np.testing.assert_almost_equal(
+                model.pdf(f.copy(), Y.copy(), Y_metadata=Y_metadata).prod(),
+                               np.exp(model.logpdf(f.copy(), Y.copy(), Y_metadata, Y_metadata).sum())
+                               )
 
     @with_setup(setUp, tearDown)
     def t_dlogpdf_df(self, model, Y, f, Y_metadata):
@@ -679,13 +680,10 @@ class TestNoiseModels(unittest.TestCase):
         m = GPy.core.GP(X.copy(), Y.copy(), kernel=kernel, likelihood=model, Y_metadata=Y_metadata, inference_method=ep_inf)
         m['.*white'].constrain_fixed(white_var)
 
-        #Set constraints
-        for constrain_param, constraint in constraints:
-            constraint(constrain_param, m)
-
         for param_num in range(len(param_names)):
             name = param_names[param_num]
             m[name] = param_vals[param_num]
+            constraints[param_num](name, m)
 
         m.randomize()
         print(m)

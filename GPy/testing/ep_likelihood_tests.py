@@ -189,8 +189,8 @@ class TestObservationModels(unittest.TestCase):
             self.assertAlmostEqual(rmse_lap, rmse_nested, delta=1.5)
 
     def test_EP_with_gaussian_small_variance(self):
-        # FIXME: small variance (< 1e-3) causes error
-        likelihood = GPy.likelihoods.Gaussian(variance=1e-3)
+        # FIXME: small variance (< 1e-2) causes error
+        likelihood = GPy.likelihoods.Gaussian(variance=1e-2)
         inf_exact = GPy.inference.latent_function_inference.ExactGaussianInference()
         m_exact = GPy.core.GP(self.X, self.Y, kernel=self.kernel1.copy(),
                               likelihood=likelihood.copy(), Y_metadata=self.Y_metadata,

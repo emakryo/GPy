@@ -38,11 +38,7 @@ from __future__ import print_function
 import os
 import sys
 from setuptools import setup, Extension
-<<<<<<< HEAD
 from Cython.Distutils import build_ext
-import numpy as np
-=======
->>>>>>> upstream/devel
 import codecs
 
 def read(fname):
