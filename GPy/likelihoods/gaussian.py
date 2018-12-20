@@ -11,14 +11,15 @@ Furthermore, exact Guassian inference can only be done for the identity link, so
 James 11/12/13
 """
 
+import warnings
 import numpy as np
 from scipy import stats, special
 from . import link_functions
 from .likelihood import Likelihood
 from ..core.parameterization import Param
-from paramz.transformations import Logexp, Logistic
+from paramz.transformations import Logexp
 from scipy import stats
-import warnings
+
 
 class Gaussian(Likelihood):
     """
@@ -36,7 +37,8 @@ class Gaussian(Likelihood):
             gp_link = link_functions.Identity()
 
         if not isinstance(gp_link, link_functions.Identity):
-            warnings.warn("Exact inference is not implemeted for non-identity link functions, if you are not already, ensure Laplace inference_method is used")
+            print("Warning, Exact inference is not implemeted for non-identity link functions,\
+            if you are not already, ensure Laplace inference_method is used")
 
         super(Gaussian, self).__init__(gp_link, name=name)
 

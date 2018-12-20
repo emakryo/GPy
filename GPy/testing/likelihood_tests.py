@@ -459,6 +459,7 @@ class TestNoiseModels(unittest.TestCase):
                 yield self.t_dlogpdf_link_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
                 yield self.t_dlogpdf_dlink_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
                 yield self.t_d2logpdf2_dlink2_dparams, model, Y, f, Y_metadata, param_vals, param_names, param_constraints
+
                 #laplace likelihood gradcheck
                 yield self.t_laplace_fit_rbf_white, model, self.X, Y, f, Y_metadata, self.step, param_vals, param_names, param_constraints
             if ep:
@@ -1121,4 +1122,5 @@ class MixedNoiseTestsWith2Gaussian(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    print("Running unit tests")
     unittest.main()
